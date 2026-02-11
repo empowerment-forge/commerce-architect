@@ -23,5 +23,17 @@
     "uptime_target": "99.5",
     "budget_sensitivity": "high"
   },
-  "phase": "phase_1"
+  "phase_1_constraints": {
+	  "hosting_budget": "free_or_under_10_usd",
+	  "disallowed_clouds": ["aws", "gcp", "azure"],
+	  "admin_required": true,
+	  "business_capabilities": [
+		"sell_services",
+		"sell_products",
+		"inventory_management",
+		"scheduling",
+		"reservations"
+	  ]
+	},
+  "phase": "phase_1" 
 }
