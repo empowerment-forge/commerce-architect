@@ -1,0 +1,11 @@
+# secrets
+.env
+
+# node
+node_modules/
+
+# agent outputs
+outputs/*.json
+
+# logs
+*.log
