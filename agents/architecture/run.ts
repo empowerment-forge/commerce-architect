@@ -5,6 +5,63 @@ import { loadFile } from "../../lib/loadFile";
 import { normalizeArchitecture } from "../../lib/normalizeArchitecture";
 import { ArchitectureSchema } from "./schema";
 
+function extractFirstJsonBlock(text: string): string | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced && fenced[1]) {
+    return fenced[1].trim();
+  }
+
+  const startCandidates = [text.indexOf("{"), text.indexOf("[")]
+    .filter((idx) => idx >= 0)
+    .sort((a, b) => a - b);
+
+  if (startCandidates.length === 0) {
+    return null;
+  }
+
+  const start = startCandidates[0];
+  const openChar = text[start];
+  const closeChar = openChar === "{" ? "}" : "]";
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (ch === openChar) {
+      depth += 1;
+      continue;
+    }
+
+    if (ch === closeChar) {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, i + 1).trim();
+      }
+    }
+  }
+
+  return null;
+}
+
 async function run() {
   const inputPath = process.argv[2];
 
@@ -26,16 +83,14 @@ async function run() {
     throw new Error("Model returned no text output");
   }
 
-  const cleaned = rawText
-    .replace(/```json/g, "")
-    .replace(/```/g, "")
-    .trim();
+  const cleaned = extractFirstJsonBlock(rawText) ?? rawText.trim();
 
   let parsed;
   try {
     parsed = JSON.parse(cleaned);
   } catch {
     console.error("Raw output:\n", rawText);
+    console.error("Extracted JSON candidate:\n", cleaned);
     throw new Error("Model did not return valid JSON");
   }
 
