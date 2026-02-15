@@ -1,0 +1,20 @@
+/* ======================================
+   Empowerment Forge – Minimal Branding
+   Keep Django Defaults
+====================================== */
+
+/* Header background only */
+#header {
+    background: #2b2f36;  /* clean graphite */
+    border-bottom: none;  /* remove orange line */
+}
+
+/* Site name styling */
+#site-name h1 {
+    color: #ffffff;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+/* Keep everything else default */
+
