@@ -1,0 +1,17 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}Empowerment Forge Admin{% endblock %}
+
+{% block branding %}
+<div id="site-name" style="display:flex; align-items:center; gap:12px;">
+    <img src="{% static 'tef-logo.png' %}" height="46" />
+    <h1>Empowerment Forge Admin</h1>
+</div>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block extrastyle %}
+<link rel="stylesheet" href="{% static 'admin/ef-admin.css' %}">
+{% endblock %}

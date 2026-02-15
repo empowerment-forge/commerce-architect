@@ -16,8 +16,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import HttpResponse
+
+def root_view(request):
+    return HttpResponse("Empowerment Forge Commerce Platform")
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path("", root_view),
+    path("admin/", admin.site.urls),
     path("api/", include("catalog.urls")),
 ]
