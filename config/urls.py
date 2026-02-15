@@ -17,12 +17,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.http import HttpResponse
+from health.views import health
 
 def root_view(request):
     return HttpResponse("Empowerment Forge Commerce Platform")
 
 urlpatterns = [
     path("", root_view),
+    path("health/", health, name="health"),
     path("admin/", admin.site.urls),
     path("api/", include("catalog.urls")),
 ]
