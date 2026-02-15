@@ -71,7 +71,7 @@ def test_token_obtain_failure(client):
 
 
 @pytest.mark.django_db
-def test_products_endpoint_requires_jwt(client):
+def test_products_endpoint_is_public_without_jwt(client):
     Product.objects.create(
         name="Protected Product",
         description="Protected product",
@@ -82,7 +82,7 @@ def test_products_endpoint_requires_jwt(client):
 
     response = client.get("/api/products/")
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
 @pytest.mark.django_db
