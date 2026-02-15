@@ -11,3 +11,4 @@ outputs/*.json
 *.log
 
 tree.txt
+tmp/
