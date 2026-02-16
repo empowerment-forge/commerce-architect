@@ -1,7 +1,7 @@
 # Commerce Architect
 
-Design-time agent system for generating secure, minimalist ecommerce
-architectures.
+Contains a design-time agent system for generating secure, minimalist ecommerce
+architectures. Includes a clean codebase built on the best-in-class trifecta of technologies for data, backend/middleware and UX for modern Web applications.
 
 ------------------------------------------------------------------------
 
@@ -156,10 +156,13 @@ Detailed documentation is located in `/docs`:
 -   [DJANGO_ARCHITECTURE.md](docs/DJANGO_ARCHITECTURE.md)
 -   [DRF_API.md](docs/DRF_API.md)
 -   [CATALOG_DOMAIN.md](docs/CATALOG_DOMAIN.md)
+-   [DEVOPS.md](docs/DEVOPS.md)
 -   [STYLE_SETUP.md](docs/STYLE_SETUP.md)
 -   [DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md)
-
-------------------------------------------------------------------------
+-   [TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md)
+-   [USERAUTH_ARCHITECTURE.md](docs/USERAUTH_ARCHITECTURE.md)
+-   [UX_ARCHITECTURE.md](docs/UX_ARCHITECTURE.md)
+-   [PRODUCTLIST_UX_v1_0.md](docs/PRODUCTLIST_UX_v1_0.md)
 
 # Usage
 
