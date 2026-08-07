@@ -1,4 +1,4 @@
-Django
+Django>=6.0,<6.1
 djangorestframework
 psycopg2-binary
 pytest
