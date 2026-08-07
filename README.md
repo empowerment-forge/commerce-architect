@@ -163,6 +163,7 @@ Detailed documentation is located in `/docs`:
 -   [USERAUTH_ARCHITECTURE.md](docs/USERAUTH_ARCHITECTURE.md)
 -   [UX_ARCHITECTURE.md](docs/UX_ARCHITECTURE.md)
 -   [PRODUCTLIST_UX_v1_0.md](docs/PRODUCTLIST_UX_v1_0.md)
+-   [LOGIN_ARCHITECTURE.md](docs/LOGIN_ARCHITECTURE.md)
 
 # Usage
 
