@@ -13,3 +13,4 @@ outputs/*.json
 tree.txt
 tmp/
 PR/
+db.sqlite3
