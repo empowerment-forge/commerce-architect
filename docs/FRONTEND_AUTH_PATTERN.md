@@ -23,7 +23,7 @@ Hybrid JWT Strategy:
 
 - Refresh Token:
   - Stored in HttpOnly, Secure cookie
-  - Path restricted to /api/auth/refresh/
+  - Path restricted to /api/auth/ so refresh and logout can receive it
   - Rotated and blacklisted on refresh
   - Never accessible to JavaScript
 
