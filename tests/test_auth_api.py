@@ -63,7 +63,8 @@ def test_token_obtain_success_sets_refresh_cookie(client):
     assert refresh_cookie["httponly"]
     assert refresh_cookie["secure"]
     assert refresh_cookie["samesite"] == "Strict"
-    assert refresh_cookie["path"] == "/api/auth/refresh/"
+    assert refresh_cookie["path"] == "/api/auth/"
+    assert refresh_cookie["max-age"] == 7 * 24 * 60 * 60
 
 
 @pytest.mark.django_db
@@ -159,6 +160,15 @@ def test_refresh_missing_cookie_returns_401(client):
 
 
 @pytest.mark.django_db
+def test_invalid_refresh_cookie_returns_401(client):
+    client.cookies["refresh_token"] = "not-a-valid-jwt"
+
+    response = client.post("/api/auth/refresh/")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
 def test_access_token_works_for_protected_endpoint(client):
     User.objects.create_user(username="accessuser", password="SecurePass123!")
 
@@ -176,3 +186,37 @@ def test_access_token_works_for_protected_endpoint(client):
 
     assert protected_response.status_code == 200
     assert protected_response.json()["username"] == "accessuser"
+
+
+@pytest.mark.django_db
+def test_me_endpoint_rejects_unauthenticated_request(client):
+    response = client.get("/api/auth/me/")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_logout_blacklists_refresh_token_and_clears_cookie(client):
+    User.objects.create_user(username="logoutuser", password="SecurePass123!")
+
+    token_response = client.post(
+        "/api/auth/token/",
+        {"username": "logoutuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    refresh_token = token_response.cookies["refresh_token"].value
+
+    logout_response = client.post("/api/auth/logout/")
+
+    assert logout_response.status_code == 200
+    assert logout_response.json() == {"detail": "Logged out."}
+    cleared_cookie = logout_response.cookies["refresh_token"]
+    assert cleared_cookie.value == ""
+    assert cleared_cookie["max-age"] == 0
+    assert cleared_cookie["path"] == "/api/auth/"
+
+    stale_client = Client()
+    stale_client.cookies["refresh_token"] = refresh_token
+    refresh_response = stale_client.post("/api/auth/refresh/")
+
+    assert refresh_response.status_code == 401

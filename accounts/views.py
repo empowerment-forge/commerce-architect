@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import permissions, status
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
@@ -12,13 +13,15 @@ from .serializers import RegisterSerializer
 
 
 REFRESH_COOKIE_NAME = "refresh_token"
-REFRESH_COOKIE_PATH = "/api/auth/refresh/"
+REFRESH_COOKIE_PATH = "/api/auth/"
 
 
 def set_refresh_cookie(response, refresh_token):
+    refresh_lifetime = settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"]
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
         value=refresh_token,
+        max_age=int(refresh_lifetime.total_seconds()),
         httponly=True,
         secure=True,
         samesite="Strict",
