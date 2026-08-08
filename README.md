@@ -81,7 +81,7 @@ compatible with local Docker Compose and Podman Compose workflows.
 
 The workflow:
 
-1.  Install locked frontend dependencies with Node.js 20
+1.  Install locked frontend dependencies with Node.js 24
 2.  Run the Vitest frontend suite
 3.  Build and start the Docker Compose services
 4.  Run pytest inside the `web` container

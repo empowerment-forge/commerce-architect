@@ -8,7 +8,7 @@ describe("ProductListPage", () => {
   });
 
   it("shows loading state while request is pending", () => {
-    vi.spyOn(global, "fetch").mockImplementation(
+    vi.spyOn(globalThis, "fetch").mockImplementation(
       () => new Promise(() => {}) as Promise<Response>,
     );
 
@@ -18,7 +18,7 @@ describe("ProductListPage", () => {
   });
 
   it("renders products after successful fetch", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue({
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => [
         {
@@ -43,7 +43,7 @@ describe("ProductListPage", () => {
   });
 
   it("shows empty state when API returns no products", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue({
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => [],
     } as Response);
@@ -54,7 +54,7 @@ describe("ProductListPage", () => {
   });
 
   it("shows error state when fetch response is not ok", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue({
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: false,
       status: 500,
     } as Response);
