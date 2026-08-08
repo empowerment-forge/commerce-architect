@@ -39,6 +39,17 @@ jobs:
       - name: Start services
         run: docker compose up -d
 
+      - name: Wait for PostgreSQL
+        run: |
+          for attempt in {1..30}; do
+            if docker compose exec -T db pg_isready -U commerce -d commerce_db; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "PostgreSQL did not become ready within 60 seconds."
+          exit 1
+
       - name: Run pytest
         run: docker compose exec -T web pytest
 
