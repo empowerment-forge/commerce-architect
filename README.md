@@ -149,6 +149,7 @@ Detailed documentation is located in `/docs`:
 
 -   [ARCHITECTURE_v1.2.md](docs/ARCHITECTURE_v1.2.md)
 -   [DOCKER_SETUP.md](docs/DOCKER_SETUP.md)
+-   [UI_SETUP.md](docs/UI_SETUP.md)
 -   [POSTGRES_SETUP.md](docs/POSTGRES_SETUP.md)
 -   [DJANGO_ARCHITECTURE.md](docs/DJANGO_ARCHITECTURE.md)
 -   [DRF_API.md](docs/DRF_API.md)
