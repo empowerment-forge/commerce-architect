@@ -23,7 +23,7 @@ dependencies, and lockfile are separate from the Django backend.
 ## Prerequisites
 
 - Node.js and npm. Install Node through your normal Node version manager or
-  development environment. The current CI workflow uses Node.js 20.
+  development environment. The current CI workflow uses Node.js 24.
 - Running backend services for API-backed UI functionality. The Django API and
   PostgreSQL database run through this repository's Docker/Podman Compose setup.
 
