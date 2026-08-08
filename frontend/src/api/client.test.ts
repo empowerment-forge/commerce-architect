@@ -6,7 +6,7 @@ describe("apiGet", () => {
   });
 
   it("adds Authorization header when token is provided", async () => {
-    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true }),
     } as Response);
@@ -19,7 +19,7 @@ describe("apiGet", () => {
   });
 
   it("does not add Authorization header when token is null", async () => {
-    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true }),
     } as Response);
@@ -32,7 +32,7 @@ describe("apiGet", () => {
   });
 
   it("calls the correct endpoint", async () => {
-    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true }),
     } as Response);
