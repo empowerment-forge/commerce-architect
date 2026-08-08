@@ -1,16 +1,18 @@
 # Commerce Architect
 
 Commerce Architect is an ecommerce platform codebase built with PostgreSQL,
-Django REST Framework, and React.
+Django REST Framework, and React/Vite.
 
 ------------------------------------------------------------------------
 
 ## Current Status
 
 -   Django + DRF backend operational
--   PostgreSQL running in Docker
--   CI (GitHub Actions) passing
--   Pytest test suite active
+-   PostgreSQL 16 running in a containerized local environment
+-   React/Vite frontend with a product-list UI
+-   Podman-compatible local development through the shared Compose file
+-   Docker Compose-based CI in GitHub Actions
+-   Pytest backend tests and Vitest frontend tests
 
 ------------------------------------------------------------------------
 
@@ -27,7 +29,7 @@ Commerce Architect is built with the following principles:
 3.  **Reversibility**
     -   Every decision must be changeable without rewrite.
 4.  **Owner-Controlled**
-    -   Docker-based.
+    -   OCI-container-based and Docker/Podman-compatible.
     -   PostgreSQL-backed.
     -   Cloud-agnostic.
 5.  **Commercial Grade**
@@ -40,18 +42,16 @@ Commerce Architect is built with the following principles:
 
 # Testing Strategy
 
-This project uses **pytest + pytest-django** as the primary test
-framework.
-
-We standardized on pytest early to avoid migrating test frameworks
-later.
+The backend uses **pytest + pytest-django**. The React frontend uses **Vitest +
+React Testing Library**.
 
 ## What We Test
 
 -   Health endpoint (`/health/`)
 -   Domain models (e.g., Product model)
 -   API endpoints (`/api/products/`)
--   Database integration (real Postgres via Docker)
+-   Database integration (real PostgreSQL through the containerized environment)
+-   React component and API-client behavior
 -   Type correctness (e.g., Decimal enforcement)
 
 ## What We Do NOT Test
@@ -76,17 +76,19 @@ If CI fails, the branch is not production-ready.
 
 # CI Pipeline (GitHub Actions)
 
-CI runs inside Docker using the same `docker-compose.yml` used locally.
+GitHub Actions CI uses Docker Compose with the same `docker-compose.yml` that is
+compatible with local Docker Compose and Podman Compose workflows.
 
 The workflow:
 
-1.  Build containers
-2.  Start services
-3.  Run pytest inside the web container
-4.  Tear down services
+1.  Install locked frontend dependencies with Node.js 20
+2.  Run the Vitest frontend suite
+3.  Build and start the Docker Compose services
+4.  Run pytest inside the `web` container
+5.  Tear down the services
 
-This ensures parity between: - Local development - CI - Production-style
-container runtime
+This checks both frontend and backend behavior while retaining an
+OCI-container-based, portable local architecture.
 
 ------------------------------------------------------------------------
 
@@ -133,11 +135,15 @@ contributors trivial. - Keeps production stable.
 
 # Current Architecture Stack
 
-Backend: - Django 6.x - Django REST Framework - PostgreSQL 16 - Docker
+Backend: - Django 6.x - Django REST Framework - PostgreSQL 16
 
-Testing: - pytest - pytest-django
+Frontend: - React - TypeScript - Vite - Tailwind CSS
 
-CI: - GitHub Actions - Docker-based pipeline
+Local containers: - Docker Compose - Podman Compose-compatible
+
+Testing: - pytest - pytest-django - Vitest - React Testing Library
+
+CI: - GitHub Actions - Docker Compose-based pipeline
 
 Future: - Stripe integration - Orders domain - Scheduling domain
 

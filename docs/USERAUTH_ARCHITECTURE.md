@@ -1,216 +1,163 @@
-# USER AUTHENTICATION ARCHITECTURE
+# User Authentication Architecture
 
 ## Overview
 
-This document defines the authentication architecture for the
-Empowerment Forge Commerce Platform.
+Commerce Architect currently uses a hybrid JWT authentication model for its
+first-party API clients. Short-lived access tokens travel in JSON and
+`Authorization` headers, while longer-lived refresh tokens remain in secure,
+HttpOnly cookies.
 
-Authentication is implemented in **phases** to balance:
-
--   Security
--   Development velocity
--   Architectural cleanliness
--   Future extensibility
-
-Phase 1 prioritizes secure, stateless API authentication using JWT.
-Phase 2 evolves the system to full OAuth 2.0 Authorization Code Flow
-with PKCE and OpenID Connect.
+This design supports the current React SPA without exposing refresh tokens to
+frontend JavaScript. Authentication remains separate from commerce domain logic
+so the platform can evolve to OAuth 2.0 Authorization Code with PKCE and OpenID
+Connect in a later phase.
 
 ------------------------------------------------------------------------
 
-# Phase 1 -- JWT-Based API Authentication (Current Implementation)
-
-## Objectives
-
--   Stateless authentication
--   No session cookies for API access
--   SPA-ready
--   Mobile-ready
--   Secure by default
--   Minimal operational complexity
--   Fully testable via CI
+# Phase 1 -- Hybrid JWT Authentication (Current Implementation)
 
 ## Technology Stack
 
--   Django
--   Django REST Framework (DRF)
--   djangorestframework-simplejwt
+-   Django and Django REST Framework (DRF)
+-   `djangorestframework-simplejwt`
+-   Simple JWT token blacklisting
 -   PostgreSQL
--   Dockerized environment
--   Pytest for test coverage
--   GitHub Actions for CI
+-   Containerized local environment
+-   Pytest backend test coverage
+-   GitHub Actions CI
 
-## Authentication Model
+## Endpoints
 
-### Token Issuance Flow
+All current authentication routes are mounted under `/api/auth/`:
 
-1.  User submits credentials (username/email + password) to:
+-   `POST /api/auth/register/` creates a user and returns the new user's ID,
+    username, and email. It does not issue tokens.
+-   `POST /api/auth/token/` validates credentials, returns an access token in
+    JSON, and sets the refresh token cookie.
+-   `POST /api/auth/refresh/` reads the refresh token from its cookie, returns a
+    new access token in JSON, and rotates the refresh token cookie when a new
+    refresh token is issued.
+-   `POST /api/auth/logout/` blacklists a valid refresh token when present and
+    clears the refresh token cookie.
+-   `GET /api/auth/me/` requires JWT authentication and returns the authenticated
+    user's ID, username, and email.
 
-    -   `POST /api/auth/login/`
+There is no `/api/auth/login/` endpoint. Login and initial token issuance use
+`POST /api/auth/token/`.
 
-2.  Backend validates credentials.
+## Access Token
 
-3.  Server returns:
+-   Lifetime: 10 minutes
+-   Returned to the client as the `access` property in a JSON response
+-   Intended to be held in frontend memory only
+-   Sent on authenticated API requests as:
 
-    -   Access Token (short-lived)
-    -   Refresh Token (longer-lived)
+    ```text
+    Authorization: Bearer <access_token>
+    ```
 
-4.  Client stores tokens securely (frontend responsibility).
+-   Validated by DRF's Simple JWT authentication class
 
-5.  All authenticated requests include:
+The access token is not placed in a cookie by the current backend.
 
-    Authorization: Bearer `<access_token>`{=html}
+## Refresh Token Cookie
 
-### Token Type
+-   Lifetime: 7 days
+-   Cookie name: `refresh_token`
+-   `HttpOnly`: enabled, so frontend JavaScript cannot read the token
+-   `Secure`: enabled, so the browser sends it only over a secure connection
+-   `SameSite`: `Strict`
+-   Path: `/api/auth/`, limiting the cookie to authentication endpoints
 
--   JWT (JSON Web Token)
--   Signed server-side
--   No server-side session storage
--   Fully stateless verification
+The refresh token is not returned in response JSON. The browser manages the
+cookie and sends it to the refresh and logout endpoints when the request meets
+the cookie's security and path rules.
 
-## Security Characteristics
+## Rotation, Blacklisting, and Logout
 
--   No server sessions
--   No cookie-based authentication for APIs
--   CSRF not required for token-based API
--   Access token expiration enforced
--   Refresh token rotation configurable
--   Password hashing via Django (PBKDF2 by default)
+Refresh token rotation is enabled. After a successful refresh, Simple JWT can
+issue a replacement refresh token, and the backend replaces the cookie with that
+token. `BLACKLIST_AFTER_ROTATION` is enabled, so the old refresh token is
+blacklisted after rotation.
 
-## Endpoints (Phase 1)
+Logout reads the refresh token cookie, attempts to blacklist that token, and
+clears the cookie at `/api/auth/`. Logout also succeeds when the cookie is absent
+or already invalid, allowing the client to finish local logout state cleanup.
 
--   POST /api/auth/register/
--   POST /api/auth/login/
--   POST /api/auth/refresh/
--   GET /api/auth/me/
+Because rotation and logout use the Simple JWT blacklist application, refresh
+token lifecycle state is maintained server-side. Access-token validation itself
+continues to use signed JWT authentication.
 
-## Testing Strategy (Phase 1)
+## Current Request Flow
 
-Tests include:
+1.  The user submits credentials to `POST /api/auth/token/`.
+2.  Django validates the credentials.
+3.  Django returns the 10-minute access token in JSON and sets the 7-day secure,
+    HttpOnly refresh token cookie.
+4.  The frontend retains the access token in memory and sends it in the Bearer
+    authorization header for protected requests such as `GET /api/auth/me/`.
+5.  When a new access token is needed, the frontend calls
+    `POST /api/auth/refresh/`; the backend reads and validates the cookie.
+6.  The backend returns a new access token and rotates the refresh token cookie.
+7.  On logout, `POST /api/auth/logout/` blacklists the refresh token and clears
+    the cookie.
 
--   User registration success/failure
--   Login success/failure
--   Token refresh
--   Protected endpoint access
--   Unauthorized access rejection
--   Token expiry behavior (future enhancement)
+## Testing
 
-All tests run inside Docker via:
+Backend authentication tests run in the `web` container. With Docker Compose:
 
-    docker compose exec -T web pytest
+```bash
+docker compose exec -T web pytest
+```
 
-CI executes tests automatically on merge events.
+With Podman Compose, the local equivalent is:
+
+```bash
+podman-compose exec -T web pytest
+```
+
+GitHub Actions currently uses Docker Compose for CI.
 
 ------------------------------------------------------------------------
 
-# Architectural Tradeoffs (Phase 1)
-
-Why not OAuth 2.0 + PKCE now?
-
-Because Phase 1 focuses on:
-
--   First-party clients only
--   Rapid iteration
--   Controlled environment
--   Minimal moving parts
-
-JWT authentication via simplejwt provides:
-
--   Production-ready security
--   Clean upgrade path
--   No architectural dead ends
-
-It is intentionally chosen as a pragmatic foundation.
-
-------------------------------------------------------------------------
-
-# Phase 2 -- Evolution to OAuth 2.0 Authorization Code Flow with PKCE
+# Phase 2 -- OAuth 2.0 Authorization Code with PKCE and OIDC
 
 ## Motivation
 
-Phase 2 will introduce:
+The planned evolution supports:
 
--   Multiple client types (SPA, mobile apps, POS devices)
--   Delegated authentication flows
+-   Multiple client types, including SPAs, mobile apps, and POS devices
+-   Delegated authorization flows
 -   Potential third-party integrations
--   Stronger separation of Authorization Server and Resource Server
--   OpenID Connect compliance
+-   Separation of authorization-server and resource-server responsibilities
+-   OpenID Connect identity capabilities
 
-## Target Standard
+## Target Standards
 
 -   OAuth 2.0 Authorization Code Flow
 -   PKCE (Proof Key for Code Exchange)
 -   OpenID Connect (OIDC)
 -   Short-lived access tokens
--   Rotating refresh tokens
+-   Secure refresh-token rotation
 
-## High-Level Phase 2 Architecture
+PKCE protects public clients against authorization-code interception without
+requiring a client secret in browser or mobile applications.
 
-### Authorization Server Responsibilities
+## Migration Direction
 
--   /oauth/authorize
--   /oauth/token
--   Client registration
--   PKCE challenge verification
--   State & nonce validation
--   ID token issuance (OIDC)
+Phase 2 is expected to introduce standards-based authorization endpoints,
+migrate first-party clients from direct credential submission to redirect-based
+authorization, and expand authentication tests. The precise server and endpoint
+design will be established when that phase is implemented.
 
-### Resource Server (API)
-
--   Verifies signed JWT access tokens
--   No session storage
--   No cookie dependency
--   Fine-grained scope enforcement
-
-## Why PKCE?
-
-PKCE ensures:
-
--   Secure public client authentication
--   Protection against authorization code interception
--   No need for client secret in SPA/mobile apps
--   Modern industry standard for OAuth implementations
-
-## Migration Strategy
-
-Phase 2 will:
-
-1.  Introduce OAuth endpoints alongside existing JWT endpoints.
-2.  Deprecate direct credential login endpoints.
-3.  Migrate SPA to redirect-based authorization.
-4.  Maintain backward compatibility during transition.
-5.  Expand test suite to cover OAuth flows.
-
-No core domain logic will require refactoring.
-
-Authentication is intentionally decoupled from business logic to enable
-this evolution.
-
-------------------------------------------------------------------------
-
-# Security Commitment
-
-By launch time, the platform will:
-
--   Use industry-standard OAuth 2.0 Authorization Code Flow with PKCE
--   Follow OpenID Connect specifications
--   Enforce HTTPS everywhere
--   Use secure token lifetimes and rotation
--   Maintain automated CI test coverage
--   Avoid unnecessary cookie-based authentication
-
-Phase 1 is secure and production-grade. Phase 2 elevates the system to
-modern identity standards.
+The current separation between authentication and commerce domain logic is
+intended to allow that evolution without rewriting the catalog and other business
+domains.
 
 ------------------------------------------------------------------------
 
 # Summary
 
-Phase 1: - JWT-based stateless API authentication - Rapid
-implementation - Secure foundation
-
-Phase 2: - OAuth 2.0 Authorization Code Flow - PKCE - OpenID Connect
-compliance - Enterprise-grade identity model
-
-This staged strategy balances speed with long-term architectural
-integrity.
+Phase 1 uses short-lived JWT access tokens in frontend memory plus rotating
+refresh tokens in secure, HttpOnly cookies. Phase 2 preserves the architectural
+direction toward OAuth 2.0 Authorization Code with PKCE and OpenID Connect.
