@@ -1,15 +1,12 @@
 # Commerce Architect
 
-Contains a design-time agent system for generating secure, minimalist ecommerce
-architectures. Includes a clean codebase built on the best-in-class trifecta of technologies for data, backend/middleware and UX for modern Web applications.
+Commerce Architect is an ecommerce platform codebase built with PostgreSQL,
+Django REST Framework, and React.
 
 ------------------------------------------------------------------------
 
 ## Current Status
 
--   Architecture Agent v1: Stable
--   Gemini integration: Working
--   Normalization + schema enforcement: Enabled
 -   Django + DRF backend operational
 -   PostgreSQL running in Docker
 -   CI (GitHub Actions) passing
@@ -165,11 +162,11 @@ Detailed documentation is located in `/docs`:
 -   [PRODUCTLIST_UX_v1_0.md](docs/PRODUCTLIST_UX_v1_0.md)
 -   [LOGIN_ARCHITECTURE.md](docs/LOGIN_ARCHITECTURE.md)
 
-# Usage
+# Architecture Tool History
 
-``` bash
-npm run architecture inputs/example_retail.json
-```
+The original architecture-generation tool was extracted into the separate
+[commerce-architecture-agent](https://github.com/anthonylpeterson/commerce-architecture-agent)
+repository. Commerce Architect does not depend on that tool.
 
 ------------------------------------------------------------------------
 
