@@ -118,6 +118,62 @@ podman-compose exec -T web pytest
 
 GitHub Actions currently uses Docker Compose for CI.
 
+## Deployment Topology and BFF Evolution
+
+Commerce Architect is committed to a first-party SPA/PWA frontend while
+preserving the ability to deploy that frontend independently from the commerce
+API. Deployment independence does not necessarily mean cross-site deployment.
+For example, `https://app.example.com` and `https://api.example.com` are
+different origins, but remain same-site because they use HTTPS and share the
+same registrable domain. By contrast,
+`https://frontend-host.example-provider.com` and
+`https://backend-host.other-provider.com` are genuinely cross-site and introduce
+additional cookie, CORS, and CSRF constraints.
+
+The current direct React SPA-to-Django/DRF authentication model remains
+acceptable for Phase 1 while the frontend and API operate in an appropriate
+same-site topology:
+
+```text
+React SPA / PWA
+      |
+      | access JWT + secure refresh cookie
+      v
+Django / DRF
+```
+
+The architecture must not require `SameSite=None` cross-site authentication as
+a foundational assumption merely to accommodate a future hosting arrangement.
+If the browser frontend and commerce APIs are later hosted on genuinely
+different sites, a Backend-for-Frontend (BFF) should be considered as the
+preferred browser-facing security boundary before weakening cookie SameSite
+policy:
+
+```text
+Browser SPA / PWA
+      |
+      | same-site secure session
+      v
+Browser-facing BFF
+      |
+      | server-to-server authentication
+      v
+Django / Commerce APIs
+```
+
+Under such a model, the browser could authenticate only with secure, HttpOnly
+session cookies while JWT or OAuth credentials remain behind the
+browser-facing boundary. Frontend authentication code should therefore avoid
+unnecessarily coupling React components to JWT mechanics, allowing session
+ownership to evolve without widespread frontend rewrites.
+
+This is an architectural constraint and future option, not a decision to
+implement a BFF or introduce another deployable service now. The guiding
+principle is to preserve strong browser cookie isolation and deployment
+flexibility by preferring an appropriate browser-facing security boundary over
+relaxing cookie policy solely for cross-site hosting. It does not assert that
+`SameSite=Strict` is suitable for every possible topology.
+
 ------------------------------------------------------------------------
 
 # Phase 2 -- OAuth 2.0 Authorization Code with PKCE and OIDC
