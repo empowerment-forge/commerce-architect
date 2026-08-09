@@ -114,31 +114,64 @@ or replaced; that decision must follow the architectural assessment.
 
 ## Near-Term Roadmap
 
-1. **Assess and complete the authentication/account architecture.** Decide the
-   account-lifecycle responsibilities and token/session strategy before building
-   additional user-facing authentication work.
-2. **Complete backend account-lifecycle and security capabilities.** Begin with
-   password-policy hardening tracked in
-   [issue #4](https://github.com/anthonylpeterson/commerce-architect/issues/4),
-   then add the selected email verification, recovery, and lifecycle support.
-3. **Connect React to authentication and session state.** The primary frontend
-   slice is tracked in
-   [issue #5](https://github.com/anthonylpeterson/commerce-architect/issues/5),
-   with concurrent refresh coordination tracked separately in
-   [issue #6](https://github.com/anthonylpeterson/commerce-architect/issues/6).
-4. **Complete the account user experience.** Deliver coherent registration,
-   login, logout, recovery, and verification flows after the underlying account
-   architecture is settled.
-5. **Add MFA and account-security features.** Introduce the selected stronger
-   authentication capabilities as a deliberate account-security slice.
-6. **Continue commerce domains.** Return to orders, checkout, payments, and the
-   guest-to-account flow represented by
-   [issue #9](https://github.com/anthonylpeterson/commerce-architect/issues/9).
-7. **Harden production deployment and security.** Production Django settings are
-   tracked in
-   [issue #7](https://github.com/anthonylpeterson/commerce-architect/issues/7),
-   and deterministic Python builds in
-   [issue #8](https://github.com/anthonylpeterson/commerce-architect/issues/8).
+Three foundational workstreams are active in parallel. The capabilities listed
+as future work are targets and do not describe current repository behavior.
+
+### Authentication / Account Architecture
+
+- Assess and settle account-lifecycle responsibilities and token/session
+  strategy before building additional user-facing authentication work.
+- Complete backend account-lifecycle and security capabilities, beginning with
+  password-policy hardening tracked in
+  [issue #4](https://github.com/anthonylpeterson/commerce-architect/issues/4),
+  followed by the selected email verification, recovery, and lifecycle support.
+- Connect React to authentication and session state. The primary frontend slice
+  is tracked in
+  [issue #5](https://github.com/anthonylpeterson/commerce-architect/issues/5),
+  with concurrent refresh coordination tracked separately in
+  [issue #6](https://github.com/anthonylpeterson/commerce-architect/issues/6).
+- Complete coherent registration, login, logout, recovery, and verification
+  flows, then add the selected MFA and stronger account-security capabilities.
+
+### Developer + Adopter Experience
+
+- Establish a repeatable local development workflow and document it in a future
+  `DEV_WORKFLOW.md`.
+- Introduce a small task command surface, potentially including `dev-up`,
+  `dev-down`, `dev-status`, `logs`, and `test`, without obscuring the underlying
+  operations.
+- Reduce developer onboarding friction while keeping setup reproducible and
+  understandable.
+- Define the production adoption and bootstrap workflow.
+- Progressively automate configuration, deployment, domain and TLS setup,
+  health verification, and operational startup where appropriate.
+
+These workflow documents and commands are planned; they do not exist as a
+standardized experience today.
+
+### Public Repository Readiness
+
+Public repository readiness is a top near-term priority, not a post-product
+cleanup task. This workstream includes:
+
+- A full repository and history secret/privacy audit
+- A licensing decision
+- `CONTRIBUTING.md`
+- `SECURITY.md`
+- Accurate public-facing maturity and status language
+- Issue and contributor hygiene
+- A final repository visibility review
+
+### Continuing Product and Production Work
+
+- Return to orders, checkout, payments, and the guest-to-account flow
+  represented by
+  [issue #9](https://github.com/anthonylpeterson/commerce-architect/issues/9).
+- Harden production deployment and security. Production Django settings are
+  tracked in
+  [issue #7](https://github.com/anthonylpeterson/commerce-architect/issues/7),
+  and deterministic Python builds in
+  [issue #8](https://github.com/anthonylpeterson/commerce-architect/issues/8).
 
 These issues are the source of detailed scope and acceptance criteria; the
 roadmap records only how they fit into the larger implementation sequence.
