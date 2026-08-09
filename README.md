@@ -154,6 +154,7 @@ Future: - Stripe integration - Orders domain - Scheduling domain
 Detailed documentation is located in `/docs`:
 
 -   [ARCHITECTURE_v1.2.md](docs/ARCHITECTURE_v1.2.md)
+-   [ROADMAP.md](docs/ROADMAP.md)
 -   [DOCKER_SETUP.md](docs/DOCKER_SETUP.md)
 -   [UI_SETUP.md](docs/UI_SETUP.md)
 -   [POSTGRES_SETUP.md](docs/POSTGRES_SETUP.md)
@@ -168,6 +169,15 @@ Detailed documentation is located in `/docs`:
 -   [UX_ARCHITECTURE.md](docs/UX_ARCHITECTURE.md)
 -   [PRODUCTLIST_UX_v1_0.md](docs/PRODUCTLIST_UX_v1_0.md)
 -   [LOGIN_ARCHITECTURE.md](docs/LOGIN_ARCHITECTURE.md)
+
+## Project Roadmap
+
+[docs/ROADMAP.md](docs/ROADMAP.md) is the living view of the platform's current
+implementation state and major next steps. Architecture documentation describes
+the intended system design and constraints, while GitHub issues contain detailed
+implementation work and acceptance criteria. The roadmap connects those levels
+and evolves as major implementation slices are completed or priorities
+materially change.
 
 # Architecture Tool History
 
