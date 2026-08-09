@@ -39,7 +39,7 @@ implementation. The goal is not merely reusable source code; it is reusable
 architecture.
 
 This is a target for the platform's evolution, not a claim that the current
-repository has feature parity with Shopify, Wix, WooCommerce, or another mature
+repository already provides the breadth of capabilities expected from a mature
 commerce platform.
 
 ## Developer Experience as an Architectural Concern
