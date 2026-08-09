@@ -38,6 +38,12 @@ Commerce Architect is built with the following principles:
     -   Clean branching discipline.
     -   Deterministic environments.
 
+Commerce Architect is intended to become an understandable, owner-controlled,
+and adoptable commerce architecture that developers and organizations can
+deploy, customize, and extend. The enduring principles and explicitly labeled
+target experience are described in
+[PLATFORM_PHILOSOPHY.md](docs/PLATFORM_PHILOSOPHY.md).
+
 ------------------------------------------------------------------------
 
 # Testing Strategy
@@ -154,6 +160,7 @@ Future: - Stripe integration - Orders domain - Scheduling domain
 Detailed documentation is located in `/docs`:
 
 -   [ARCHITECTURE_v1.2.md](docs/ARCHITECTURE_v1.2.md)
+-   [PLATFORM_PHILOSOPHY.md](docs/PLATFORM_PHILOSOPHY.md)
 -   [ROADMAP.md](docs/ROADMAP.md)
 -   [DOCKER_SETUP.md](docs/DOCKER_SETUP.md)
 -   [UI_SETUP.md](docs/UI_SETUP.md)
@@ -194,8 +201,12 @@ This repository is not a toy.
 It is designed to become:
 
 -   A commercial-grade ecommerce platform
--   A reusable architecture template
--   A client-deployable framework
+-   A reusable and understandable commerce architecture
+-   A framework that adopters can deploy and operate for their own businesses or
+    clients
+-   A platform with intentional developer and operator experiences
+-   An owner-controlled foundation for customization and extension
 -   A scalable multi-domain system
 
-Every decision going forward should preserve that intent.
+These are production goals, not a claim that the repository is production-ready
+today. Every decision going forward should preserve that intent.

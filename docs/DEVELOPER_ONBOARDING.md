@@ -22,6 +22,11 @@ documents.
 The repository's Compose file supports both documented local runtimes. GitHub
 Actions CI uses Docker Compose.
 
+This guide documents the current multi-step setup. A future
+`DEV_WORKFLOW.md` and smaller standardized command surface are intended to
+reduce onboarding friction, but those capabilities are not implemented or
+documented as current commands yet.
+
 ## Access Points
 
 -   Django: `http://localhost:8000/`
