@@ -8,7 +8,8 @@ DRF provides serialization and API transport layer.
 
 # Installation
 
-Added to requirements.txt and INSTALLED_APPS (in config/settings.py):
+Added to `backend/requirements.txt` and `INSTALLED_APPS` in
+`backend/config/settings.py`:
 
     rest_framework
 

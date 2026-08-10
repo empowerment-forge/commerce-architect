@@ -6,6 +6,11 @@ This guide is the entry point for a Commerce Architect development environment.
 The detailed backend and frontend instructions live in their dedicated setup
 documents.
 
+The Django / DRF application lives in `backend/`, and the React / Vite
+application lives in `frontend/`. Run the preferred Compose workflow from the
+repository root, where `docker-compose.yml` orchestrates both components and
+PostgreSQL.
+
 ## Fresh-Clone Setup
 
 1.  Clone the repository and enter its root directory:
