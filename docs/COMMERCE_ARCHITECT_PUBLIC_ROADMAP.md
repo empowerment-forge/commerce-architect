@@ -284,13 +284,13 @@ Directly implicated tooling included Vitest, Vite, and PostCSS. Remediation must
 be performed through a dedicated, reviewed dependency change rather than by
 automatic audit fixes.
 
-`requirements.txt` is not fully deterministic. A Python vulnerability scanner
-was unavailable during the audit, so Python locking/constraints and automated
-vulnerability auditing remain planned work.
+`backend/requirements.txt` is not fully deterministic. A Python vulnerability
+scanner was unavailable during the audit, so Python locking/constraints and
+automated vulnerability auditing remain planned work.
 
 ### Django Deployment Posture
 
-`manage.py check --deploy` reported development-oriented warnings for:
+`backend/manage.py check --deploy` reported development-oriented warnings for:
 
 - The development `SECRET_KEY`
 - `DEBUG=True`
