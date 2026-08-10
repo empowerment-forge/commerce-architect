@@ -8,17 +8,16 @@ safe publication, licensing, stewardship, repository ownership, community entry
 points, security readiness, and repository governance. It does not replace the
 product roadmap.
 
-Current repository:
-
-<https://github.com/anthonylpeterson/commerce-architect>
-
-Intended official repository:
+Current official repository:
 
 <https://github.com/empowerment-forge/commerce-architect>
 
-**Current status:** private repository; preparation and decisions in progress.
+**COMPLETE:** Repository ownership transfer to Empowerment Forge.
 
-**DECISION REQUIRED:** The final open-source license has not been selected.
+**IN PROGRESS:** Public-readiness work. The repository remains private.
+
+**DECISION REQUIRED:** Final component licenses and contributor terms have not
+been selected.
 
 Publication is more than making source files visible. Commerce Architect should
 become a genuine open-source commerce application platform that developers,
@@ -85,10 +84,48 @@ other commercial offerings without restricting adopters' open-source freedoms.
 **DECISION REQUIRED:** Define the boundary among copyright licensing,
 contributor rights, official-project governance, and trademark/branding policy.
 
+## Current Application Boundaries
+
+**COMPLETE:** The application now has explicit sibling component boundaries:
+
+```text
+backend/   Django / DRF / Python commerce platform
+frontend/  React / Vite / TypeScript client
+```
+
+The backend extraction preserved runtime behavior, APIs, Compose topology, CI
+behavior, PostgreSQL data, backend and frontend tests, and frontend behavior.
+This boundary clarifies ownership and allows the licensing study to consider a
+different license for each component. No component license is final.
+
 ## Licensing and Stewardship Study
 
-**BLOCKER BEFORE PUBLIC:** Publication must not proceed without an explicit
-license decision and a valid `LICENSE` file.
+**BLOCKER BEFORE PUBLIC:** Publication must not proceed without explicit
+component license decisions and valid license artifacts.
+
+### Current Leading Direction
+
+**DECISION REQUIRED:** Commerce Architect is actively considering a
+component-specific licensing model.
+
+- `backend/`: AGPL-3.0 is the leading candidate. The goal is to preserve genuine
+  open-source and commercial-use freedom while discouraging a large SaaS or
+  cloud provider from privately modifying the shared backend platform and
+  monetizing those covered modifications without making them available to
+  network users.
+- Backend contributions: a Contributor License Agreement (CLA) is under
+  consideration so Empowerment Forge can preserve sufficient rights for
+  long-term stewardship and possible future commercial or dual-licensing
+  options. No CLA exists, its terms have not been selected, legal review may be
+  appropriate, and contributor copyright and relicensing terms remain a
+  decision required.
+- `frontend/`: a separately chosen, more permissive license is under
+  consideration. Apache License 2.0 is the leading permissive candidate, but it
+  has not been selected.
+
+If Business Source License 1.1 is considered later, it must be evaluated as a
+source-available license rather than an OSI open-source license and therefore as
+a different philosophical choice.
 
 ### Candidate Licenses
 
@@ -139,6 +176,10 @@ lessons applicable to Commerce Architect.
 
 ### Licensing and Stewardship Decisions
 
+- [ ] **DECISION REQUIRED:** Select the `backend/` license.
+- [ ] **DECISION REQUIRED:** Select the `frontend/` license.
+- [ ] **DECISION REQUIRED:** Select any CLA or other contributor model and its
+  copyright and relicensing terms.
 - [ ] **DECISION REQUIRED:** Decide how SaaS/network-use modifications should be
   treated.
 - [ ] **DECISION REQUIRED:** Select the initial contributor licensing model,
@@ -148,58 +189,67 @@ lessons applicable to Commerce Architect.
 - [ ] **DECISION REQUIRED:** Decide the initial trademark and branding posture.
 - [ ] **DECISION REQUIRED:** Determine whether future dual licensing must remain
   possible and what contributor permissions it would require.
-- [ ] Select the final license.
-- [ ] Add the `LICENSE` file in a separately reviewed change.
+- [ ] Decide future SDK licensing.
+- [ ] Decide future CLI licensing.
+- [ ] Define extension and plugin licensing expectations.
+- [ ] Decide whether documentation needs a separate license.
+- [ ] Add a clear top-level explanation of multi-license boundaries.
+- [ ] Add SPDX identifiers or other license metadata where useful.
+- [ ] Add the required component license artifacts in a separately reviewed
+  change.
 - [ ] Verify dependency and asset license compatibility.
-- [ ] Record the license decision and rationale.
+- [ ] Record each license decision and rationale.
 
 ## Repository Ownership and Organization Transfer
 
-The repository should be transferred with GitHub's repository-transfer
-capability rather than recreated. The transfer should preserve Git history and
-GitHub project metadata where supported.
+The repository was transferred with GitHub's repository-transfer capability
+rather than recreated. The transfer preserved Git history and GitHub project
+metadata.
 
 ### Before Transfer
 
-- [ ] Confirm the current maintainer has admin access to
-  `anthonylpeterson/commerce-architect`.
-- [ ] Confirm the maintainer may create repositories in the
-  `empowerment-forge` organization.
-- [ ] Confirm `empowerment-forge/commerce-architect` does not already exist.
+- [x] Confirm the current maintainer had the repository admin access required to
+  transfer `anthonylpeterson/commerce-architect`.
+- [x] Confirm the `empowerment-forge` organization could receive the repository.
+- [x] Confirm the target repository name was available.
 - [ ] Confirm no conflicting fork network prevents transfer.
-- [ ] Review Empowerment Forge owners, teams, roles, and repository-creation
+- [x] Review Empowerment Forge owners, teams, roles, and repository-creation
   permissions.
 - [ ] Decide who receives admin, maintain, write, triage, and read access.
-- [ ] Verify GitHub App and Codex authorization can follow the transfer.
-- [ ] Verify Actions and workflow permissions remain appropriate.
+- [x] Verify GitHub App and Codex authorization followed the transfer.
+- [x] Verify Actions and workflow permissions remain appropriate.
 - [ ] Record existing branch settings and rulesets for post-transfer review.
-- [ ] Identify local Git remotes and external URLs that may need updating.
+- [x] Identify and update the local Git remote.
 - [ ] Identify documentation, badges, webhooks, deployment integrations, and
   connector references tied to the old owner.
 
 ### Transfer
 
-- [ ] Transfer the repository to `empowerment-forge` through GitHub.
-- [ ] Do not recreate or reinitialize the repository.
+- [x] Transfer the repository to `empowerment-forge` through GitHub.
+- [x] Preserve the repository rather than recreating or reinitializing it.
 
 ### After Transfer
 
-- [ ] Confirm the owner is `empowerment-forge`.
-- [ ] Confirm full Git history is intact.
-- [ ] Confirm issues are intact.
-- [ ] Confirm pull requests and review history are intact.
+- [x] Confirm the owner is `empowerment-forge`.
+- [x] Confirm full Git history is intact.
+- [x] Confirm issues are intact.
+- [x] Confirm pull requests and review history are intact.
 - [ ] Confirm tags and releases are intact.
-- [ ] Confirm Actions still run.
-- [ ] Confirm `develop` and `main` remain correct.
-- [ ] Update or verify local Git remotes.
-- [ ] Confirm local clones can fetch and push normally.
-- [ ] Confirm Codex and `gh` authentication can access the repository.
-- [ ] Confirm the ChatGPT GitHub connector can access the repository.
-- [ ] Review organization ownership and repository administrator access.
+- [x] Confirm Actions still run.
+- [x] Confirm `develop` is synchronized with `origin/develop`.
+- [ ] Reconcile and verify `main` for publication.
+- [x] Update the local Git remote to
+  `git@github.com:empowerment-forge/commerce-architect.git`.
+- [x] Confirm local Git/SSH fetch and push access.
+- [x] Confirm Codex and `gh` authentication can access the private repository.
+- [x] Confirm the ChatGPT GitHub connector can access the private repository.
+- [x] Review organization ownership and repository administrator access.
 - [ ] Review branch settings and rulesets after transfer.
 - [ ] Find and update links that incorrectly use the previous repository owner.
 
-The transfer is not authorized by this roadmap and has not yet occurred.
+**COMPLETE:** The transfer has occurred successfully. Git history, issues,
+pull-request history, Actions, access, and the private repository state were
+preserved.
 
 ## Initial Governance and Contributor Access
 
@@ -324,29 +374,38 @@ mistaken for production configuration.
 - [ ] Complete the historical case studies.
 - [ ] Compare Apache-2.0, GPLv3, AGPLv3, and MPL-2.0.
 - [ ] Compare MIT and BSD 3-Clause as permissive baselines.
+- [ ] Select the `backend/` license; AGPL-3.0 is the leading candidate.
+- [ ] Select the `frontend/` license; Apache-2.0 is the leading permissive
+  candidate.
 - [ ] Decide the approach to SaaS/network-use modifications.
-- [ ] Decide the initial contributor licensing model.
+- [ ] Decide the initial CLA or other contributor licensing model.
 - [ ] Decide copyright ownership and stewardship.
 - [ ] Decide the initial trademark and branding posture.
-- [ ] Select the final license.
-- [ ] Add the `LICENSE` file.
+- [ ] Decide future SDK, CLI, extension/plugin, and documentation licensing.
+- [ ] Document the multi-license boundary and useful SPDX metadata.
+- [ ] Add the required component license artifacts.
 - [ ] Verify dependency and asset license compatibility.
 
-Publication must not proceed before an explicit license decision.
+Publication must not proceed before explicit component license and contributor
+terms decisions.
 
 ### Phase 2 — Repository Ownership
 
-**SHOULD COMPLETE BEFORE PUBLIC**
+**COMPLETE:** Repository ownership transfer. Remaining checks below stay open
+where they have not yet been fully verified.
 
-- [ ] Verify Empowerment Forge organization permissions.
-- [ ] Verify the target repository name is available.
-- [ ] Transfer the repository to `empowerment-forge`.
-- [ ] Verify Git history, issues, PRs, tags, releases, and Actions.
-- [ ] Update or verify local Git remotes.
-- [ ] Verify Codex and `gh` access.
-- [ ] Verify ChatGPT GitHub connector access.
-- [ ] Verify organization ownership and administrator configuration.
-- [ ] Verify `main` and `develop` after transfer.
+- [x] Verify Empowerment Forge organization permissions.
+- [x] Verify the target repository is owned by `empowerment-forge`.
+- [x] Transfer the repository to `empowerment-forge`.
+- [x] Verify Git history, issues, pull requests, review history, and Actions.
+- [ ] Verify tags and releases.
+- [x] Update the local Git remote and verify Git/SSH access.
+- [x] Verify Codex and `gh` access.
+- [x] Verify ChatGPT GitHub connector access.
+- [x] Verify organization ownership and administrator configuration.
+- [x] Verify `develop` is synchronized with `origin/develop`.
+- [ ] Reconcile and verify `main` for publication.
+- [ ] Review branch settings and rulesets after transfer.
 - [ ] Update owner-specific documentation and external links.
 
 ### Phase 3 — Security and Configuration Hygiene
@@ -387,10 +446,12 @@ Publication must not proceed before an explicit license decision.
 **BLOCKER BEFORE PUBLIC:** security, contribution, and accurate maturity entry
 points.
 
+- [ ] Add the selected `LICENSE` or component license artifacts.
 - [ ] Add `SECURITY.md`.
 - [ ] Define a private vulnerability-reporting process.
 - [ ] State that vulnerabilities must not be filed as public issues.
 - [ ] Add `CONTRIBUTING.md`.
+- [ ] Add the selected CLA/contributor terms if required by the final model.
 - [ ] Document the branch, PR, review, and CI contributor workflow.
 - [ ] Document contributor licensing expectations.
 - [ ] Add maintainer and contact guidance.
@@ -433,8 +494,9 @@ publication and enable or verify them immediately after visibility changes.
 
 **BLOCKER BEFORE PUBLIC: explicit go/no-go review**
 
-- [ ] Repository is owned by `empowerment-forge`.
-- [ ] Final `LICENSE` exists and matches the stewardship decision.
+- [x] Repository is owned by `empowerment-forge`.
+- [ ] Final component license artifacts exist and match the stewardship
+  decisions.
 - [ ] `SECURITY.md` exists.
 - [ ] `CONTRIBUTING.md` exists.
 - [ ] No known critical/high dependency issue remains without explicit
@@ -445,7 +507,10 @@ publication and enable or verify them immediately after visibility changes.
 - [ ] Frontend tests pass.
 - [ ] Frontend build passes.
 - [ ] Frontend lint passes.
-- [ ] CI is green.
+- [ ] Reconcile the current approved `develop` state into `main`.
+- [ ] Confirm the publication-candidate `main` README describes the current
+  platform and contains no stale Gemini or architecture-agent language.
+- [ ] Final CI passes on the publication candidate.
 - [ ] Django deployment posture is understood and documented.
 - [ ] A dedicated secret scan passes.
 - [ ] Git history contains no credential requiring removal.
