@@ -162,6 +162,12 @@ CI: - GitHub Actions - Docker Compose-based pipeline
 
 Future: - Stripe integration - Orders domain - Scheduling domain
 
+## Licensing and Contributions
+
+Commerce Architect uses component-specific software licenses. See
+[`LICENSE.md`](LICENSE.md) for the licensing map and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the current contribution policy.
+
 ## Local Development
 
 The preferred local development workflow uses the shared Compose configuration

@@ -16,8 +16,11 @@ Current official repository:
 
 **IN PROGRESS:** Public-readiness work. The repository remains private.
 
-**DECISION REQUIRED:** Final component licenses and contributor terms have not
-been selected.
+**COMPLETE:** The component-specific software licenses are selected and their
+license artifacts are present.
+
+**DECISION REQUIRED:** Final CLA and contributor-rights terms have not been
+selected.
 
 Publication is more than making source files visible. Commerce Architect should
 become a genuine open-source commerce application platform that developers,
@@ -95,20 +98,19 @@ frontend/  React / Vite / TypeScript client
 
 The backend extraction preserved runtime behavior, APIs, Compose topology, CI
 behavior, PostgreSQL data, backend and frontend tests, and frontend behavior.
-This boundary clarifies ownership and allows the licensing study to consider a
-different license for each component. No component license is final.
+This boundary clarifies ownership and supports a different license for each
+component.
 
 ## Licensing and Stewardship Study
 
-**BLOCKER BEFORE PUBLIC:** Publication must not proceed without explicit
-component license decisions and valid license artifacts.
+**IN PROGRESS:** Component licenses and license artifacts are established.
+Dependency and asset compatibility review and contributor terms remain open.
 
-### Current Leading Direction
+### Selected Component Model
 
-**DECISION REQUIRED:** Commerce Architect is actively considering a
-component-specific licensing model.
+**COMPLETE:** Commerce Architect uses a component-specific licensing model.
 
-- `backend/`: AGPL-3.0 is the leading candidate. The goal is to preserve genuine
+- `backend/`: `AGPL-3.0-only`. The goal is to preserve genuine
   open-source and commercial-use freedom while discouraging a large SaaS or
   cloud provider from privately modifying the shared backend platform and
   monetizing those covered modifications without making them available to
@@ -119,19 +121,18 @@ component-specific licensing model.
   options. No CLA exists, its terms have not been selected, legal review may be
   appropriate, and contributor copyright and relicensing terms remain a
   decision required.
-- `frontend/`: a separately chosen, more permissive license is under
-  consideration. Apache License 2.0 is the leading permissive candidate, but it
-  has not been selected.
+- `frontend/`: `Apache-2.0`, giving merchants, agencies, and developers broad
+  freedom to adopt, commercially use, and customize the client, including in
+  proprietary applications subject to the license terms.
 
-If Business Source License 1.1 is considered later, it must be evaluated as a
-source-available license rather than an OSI open-source license and therefore as
-a different philosophical choice.
+Business Source License 1.1 was not selected. It is source-available rather than
+an OSI open-source license and would represent a different philosophical choice.
 
 ### Candidate Licenses
 
-- [ ] Evaluate Apache License 2.0.
+- [x] Evaluate Apache License 2.0.
 - [ ] Evaluate GPLv3.
-- [ ] Evaluate AGPLv3.
+- [x] Evaluate AGPLv3.
 - [ ] Evaluate MPL 2.0.
 - [ ] Use MIT as a permissive baseline for comparison.
 - [ ] Use BSD 3-Clause as a permissive baseline for comparison.
@@ -176,12 +177,18 @@ lessons applicable to Commerce Architect.
 
 ### Licensing and Stewardship Decisions
 
-- [ ] **DECISION REQUIRED:** Select the `backend/` license.
-- [ ] **DECISION REQUIRED:** Select the `frontend/` license.
+- [x] Select `AGPL-3.0-only` for `backend/`.
+- [x] Select `Apache-2.0` for `frontend/`.
+- [x] Select a component-specific licensing model.
+- [x] Establish a temporary contribution policy that welcomes non-code
+  participation while external code pull requests are paused.
 - [ ] **DECISION REQUIRED:** Select any CLA or other contributor model and its
   copyright and relicensing terms.
-- [ ] **DECISION REQUIRED:** Decide how SaaS/network-use modifications should be
-  treated.
+- [ ] Obtain appropriate legal review before adopting a CLA.
+- [ ] **DECISION REQUIRED:** Select contributor relicensing and sublicensing
+  language, if any.
+- [x] Decide how SaaS/network-use modifications should be treated by selecting
+  `AGPL-3.0-only` for the backend.
 - [ ] **DECISION REQUIRED:** Select the initial contributor licensing model,
   such as inbound=outbound, a Developer Certificate of Origin, or a contributor
   agreement if one is justified.
@@ -193,12 +200,12 @@ lessons applicable to Commerce Architect.
 - [ ] Decide future CLI licensing.
 - [ ] Define extension and plugin licensing expectations.
 - [ ] Decide whether documentation needs a separate license.
-- [ ] Add a clear top-level explanation of multi-license boundaries.
+- [x] Add a clear top-level explanation of multi-license boundaries in
+  `LICENSE.md`.
 - [ ] Add SPDX identifiers or other license metadata where useful.
-- [ ] Add the required component license artifacts in a separately reviewed
-  change.
+- [x] Add `backend/LICENSE`, `frontend/LICENSE`, and `LICENSE.md`.
 - [ ] Verify dependency and asset license compatibility.
-- [ ] Record each license decision and rationale.
+- [x] Record the component license decisions and rationale.
 
 ## Repository Ownership and Organization Transfer
 
@@ -368,26 +375,27 @@ mistaken for production configuration.
 
 ### Phase 1 — Licensing and Stewardship
 
-**BLOCKER BEFORE PUBLIC**
+**IN PROGRESS:** Component licensing is established. Compatibility review and
+contributor/legal decisions remain open.
 
-- [ ] Define and approve open-source licensing principles.
+- [x] Define and approve the initial component-specific licensing principles.
 - [ ] Complete the historical case studies.
 - [ ] Compare Apache-2.0, GPLv3, AGPLv3, and MPL-2.0.
 - [ ] Compare MIT and BSD 3-Clause as permissive baselines.
-- [ ] Select the `backend/` license; AGPL-3.0 is the leading candidate.
-- [ ] Select the `frontend/` license; Apache-2.0 is the leading permissive
-  candidate.
-- [ ] Decide the approach to SaaS/network-use modifications.
+- [x] Select `AGPL-3.0-only` for `backend/`.
+- [x] Select `Apache-2.0` for `frontend/`.
+- [x] Decide the approach to SaaS/network-use modifications.
 - [ ] Decide the initial CLA or other contributor licensing model.
 - [ ] Decide copyright ownership and stewardship.
 - [ ] Decide the initial trademark and branding posture.
 - [ ] Decide future SDK, CLI, extension/plugin, and documentation licensing.
-- [ ] Document the multi-license boundary and useful SPDX metadata.
-- [ ] Add the required component license artifacts.
+- [x] Document the multi-license boundary and future SPDX approach.
+- [x] Add the required component license artifacts.
 - [ ] Verify dependency and asset license compatibility.
 
-Publication must not proceed before explicit component license and contributor
-terms decisions.
+Publication must not proceed before dependency and asset compatibility review
+and the remaining contributor/legal decisions are resolved or explicitly
+accepted.
 
 ### Phase 2 — Repository Ownership
 
@@ -446,14 +454,16 @@ where they have not yet been fully verified.
 **BLOCKER BEFORE PUBLIC:** security, contribution, and accurate maturity entry
 points.
 
-- [ ] Add the selected `LICENSE` or component license artifacts.
+- [x] Add the selected component license artifacts and repository license map.
 - [ ] Add `SECURITY.md`.
 - [ ] Define a private vulnerability-reporting process.
 - [ ] State that vulnerabilities must not be filed as public issues.
-- [ ] Add `CONTRIBUTING.md`.
+- [x] Add `CONTRIBUTING.md` with the temporary external-code contribution
+  policy.
 - [ ] Add the selected CLA/contributor terms if required by the final model.
-- [ ] Document the branch, PR, review, and CI contributor workflow.
-- [ ] Document contributor licensing expectations.
+- [x] Document the intended branch, PR, review, and CI contributor workflow.
+- [x] Document current contributor licensing expectations without creating a
+  CLA.
 - [ ] Add maintainer and contact guidance.
 - [ ] Add a prominent README maturity/status statement.
 - [ ] Remove defensive or stale public-facing wording.
@@ -461,7 +471,8 @@ points.
 - [ ] Add a concise documentation map.
 - [ ] Clarify current, frozen, superseded, and aspirational documents.
 - [ ] Verify branding and logo publication rights.
-- [ ] Link the license, security policy, and contribution guide from README.
+- [x] Link the license map and contribution guide from README.
+- [ ] Link the security policy from README after `SECURITY.md` exists.
 
 ### Phase 6 — GitHub Public-Repository Configuration
 
@@ -495,10 +506,10 @@ publication and enable or verify them immediately after visibility changes.
 **BLOCKER BEFORE PUBLIC: explicit go/no-go review**
 
 - [x] Repository is owned by `empowerment-forge`.
-- [ ] Final component license artifacts exist and match the stewardship
-  decisions.
+- [x] Component license artifacts exist and match the selected software
+  licenses.
 - [ ] `SECURITY.md` exists.
-- [ ] `CONTRIBUTING.md` exists.
+- [x] `CONTRIBUTING.md` exists with the temporary contribution policy.
 - [ ] No known critical/high dependency issue remains without explicit
   acceptance.
 - [ ] Development secrets cannot masquerade as production secrets.
