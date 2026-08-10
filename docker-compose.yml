@@ -14,11 +14,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   web:
-    build: .
+    build: ./backend
     container_name: commerce_web
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
-      - .:/app
+      - ./backend:/app
     ports:
       - "8000:8000"
     depends_on:

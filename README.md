@@ -3,6 +3,14 @@
 Commerce Architect is an ecommerce platform codebase built with PostgreSQL,
 Django REST Framework, and React/Vite.
 
+The application source is divided into two explicit component directories:
+
+-   `backend/` contains the Django / DRF / Python application.
+-   `frontend/` contains the React / Vite / TypeScript application.
+
+Repository-level orchestration, CI configuration, and documentation remain at
+the repository root.
+
 ------------------------------------------------------------------------
 
 ## Current Status
