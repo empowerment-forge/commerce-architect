@@ -20,15 +20,38 @@ The frontend uses:
 The frontend is an independent Node project under `frontend/`. Its npm scripts,
 dependencies, and lockfile are separate from the Django backend.
 
-## Prerequisites
+## Preferred Compose workflow
 
-- Node.js and npm. Install Node through your normal Node version manager or
-  development environment. The current CI workflow uses Node.js 24.
-- Running backend services for API-backed UI functionality. The Django API and
-  PostgreSQL database run through this repository's Docker/Podman Compose setup.
+The preferred local workflow runs PostgreSQL, Django, and the Vite development
+server together through Compose. From the repository root, follow
+[DOCKER_SETUP.md](DOCKER_SETUP.md) and run either:
 
-Follow [DOCKER_SETUP.md](DOCKER_SETUP.md) to build, start, migrate, and stop the
-backend services. This guide does not duplicate that setup.
+```bash
+docker compose up --build -d
+```
+
+or:
+
+```bash
+podman-compose up --build -d
+```
+
+The frontend is then available at `http://localhost:5173/`. Its source directory
+is bind-mounted into the container, so Vite detects host edits and provides hot
+module replacement without an image rebuild.
+
+The frontend image uses Node.js 24 and installs dependencies with `npm ci` from
+`frontend/package-lock.json`. A separate `frontend_node_modules` volume mounted
+at `/app/node_modules` prevents the source bind mount from replacing the
+container's Linux dependencies. The startup command runs `npm ci` so this volume
+stays synchronized with the lockfile. No host-global frontend dependency install
+is required for the Compose workflow.
+
+## Optional native frontend workflow
+
+Running Vite directly on the host remains supported when useful. This optional
+workflow requires Node.js 24 and npm on the host, plus the Compose `web` and `db`
+services for API-backed UI functionality.
 
 ## Install frontend dependencies
 
@@ -73,7 +96,7 @@ npm run test:watch
 That script invokes `vitest --watch`. Vitest runs the tests and stays active,
 rerunning relevant tests as files change. Press `Ctrl+C` to leave watch mode.
 
-## Start the development server
+## Start the development server natively
 
 From `frontend/`:
 
@@ -82,8 +105,9 @@ npm run dev
 ```
 
 The `dev` script invokes Vite. Vite starts the local development server, serves
-the React application, and updates the browser as frontend files change. Keep this
-terminal running while working with the UI.
+the React application, and updates the browser as frontend files change. Keep
+this terminal running while working with the UI. This is the native alternative
+to the preferred Compose-managed frontend service.
 
 ## View the application
 
@@ -99,28 +123,30 @@ empty, or product-card states based on the response.
 
 ## Frontend/backend development architecture
 
-During local development, requests follow this path:
+During preferred Compose-managed local development, requests follow this path:
 
 ```text
 Browser
    -> Vite development server on localhost:5173
    -> /api proxy
-   -> Django/DRF on localhost:8000
+   -> Django/DRF at web:8000 on the Compose network
    -> PostgreSQL
 ```
 
 The product page requests `/api/products/`. In `frontend/vite.config.ts`, Vite is
 configured to proxy every request beginning with `/api` to
-`http://localhost:8000`, with `changeOrigin: true`. The browser therefore sends a
-same-origin request to the Vite server on port 5173, and Vite forwards it to the
-Django/DRF backend on port 8000. The `/api` path is preserved. Django then reads
-the product data from PostgreSQL.
+the `VITE_API_PROXY_TARGET` value. Compose sets that value to
+`http://web:8000`, because `localhost` inside the frontend container would refer
+to the frontend container itself. When Vite is run natively and the variable is
+unset, the target defaults to `http://localhost:8000`. The browser sends a
+same-origin request to Vite on port 5173, Vite preserves the `/api` path and
+forwards it to Django, and Django reads product data from PostgreSQL.
 
 This proxy applies while using the Vite development server. The API client also
 supports a `VITE_API_BASE_URL` environment value, but when it is unset—as in the
 normal local setup—it uses relative `/api` paths and the Vite proxy.
 
-## Verify backend services before starting the UI
+## Verify the development services
 
 From the repository root, check the Compose services:
 
@@ -129,10 +155,11 @@ docker compose ps
 ```
 
 This uses Docker Compose to list the current project containers and their state.
-Expect the `web` service (Django) and `db` service (PostgreSQL) to be running. The
-frontend needs Django available on port 8000 for proxied API requests, and Django
-needs PostgreSQL available to retrieve product data. If either service is down,
-the page may show its API error state instead of products.
+Expect the `frontend` (Vite), `web` (Django), and `db` (PostgreSQL) services to be
+running. The frontend needs Django available as `web:8000` for proxied API
+requests, and Django needs PostgreSQL available as `db:5432` to retrieve product
+data. If either backend service is down, the page may show its API error state
+instead of products.
 
 If your environment uses the standalone Podman Compose command for this same
 Compose file, the equivalent status check is:
@@ -147,9 +174,10 @@ shutdown workflow.
 
 ## Stop the frontend
 
-Press `Ctrl+C` in the terminal running `npm run dev`. This interrupts Vite and
-stops the frontend development server. It does not stop the backend containers;
-manage those separately using the commands in [DOCKER_SETUP.md](DOCKER_SETUP.md).
+For the preferred Compose workflow, stop the complete development stack from the
+repository root with `docker compose down` or `podman-compose down`. For native
+Vite, press `Ctrl+C` in the terminal running `npm run dev`; this stops only the
+host Vite process.
 
 ## Useful npm commands
 
@@ -169,12 +197,17 @@ defined in `frontend/package.json`.
 
 A normal frontend session is:
 
-1. From the repository root, start the backend as described in
+1. From the repository root, start the complete stack as described in
    [DOCKER_SETUP.md](DOCKER_SETUP.md), or confirm it is running with
    `docker compose ps` (or `podman-compose ps` in that environment).
-2. Enter the frontend project with `cd frontend`.
-3. Run `npm ci` after a fresh clone or when dependency files have changed.
-4. Run `npm run test -- --run` to verify the frontend suite once.
-5. Run `npm run dev` and leave that terminal active.
-6. Browse to `http://localhost:5173/` and work with the product-list UI.
-7. Press `Ctrl+C` in the Vite terminal to stop the frontend server.
+2. Browse to `http://localhost:5173/` and work with the product-list UI; Vite
+   reloads the browser as bind-mounted frontend source changes.
+3. Run frontend checks through the container when needed, for example
+   `docker compose exec frontend npm run test -- --run` (or the equivalent
+   Podman Compose command).
+4. Stop the stack with the Compose `down` command for the selected runtime.
+
+This local development container is not a production frontend deployment
+decision. A future production environment may build the React application and
+host the resulting assets through a dedicated frontend or static hosting
+provider instead of running Vite.

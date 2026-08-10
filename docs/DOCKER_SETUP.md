@@ -2,10 +2,10 @@
 
 ## Purpose
 
-This document explains how to run the Commerce Architect Django and PostgreSQL
-services locally with either Podman Compose or Docker Compose. The checked-in
-`docker-compose.yml` is compatible with both workflows; use the container runtime
-that fits your development environment.
+This document explains how to run the Commerce Architect PostgreSQL, Django, and
+React/Vite development services locally with either Podman Compose or Docker
+Compose. The checked-in `docker-compose.yml` is compatible with both workflows;
+use the container runtime that fits your development environment.
 
 GitHub Actions CI currently uses Docker Compose. Local Linux development can use
 Podman and Podman Compose without changing the Compose file.
@@ -14,18 +14,25 @@ Podman and Podman Compose without changing the Compose file.
 
 # Architecture Overview
 
-The Compose project defines two services:
+The Compose project defines three services:
 
 -   `web` -- Django development server, published at local port `8000`
 -   `db` -- PostgreSQL 16, published at local port `5432`
+-   `frontend` -- React/Vite development server, published at local port `5173`
 
 The named volume `postgres_data` stores PostgreSQL data outside the lifecycle of
 an individual container. A normal stop and restart therefore preserves database
-data.
+data. The named volume `frontend_node_modules` keeps Linux frontend dependencies
+inside the container environment while `./frontend` is bind-mounted at `/app`
+for live source edits. At startup, `npm ci` synchronizes that dependency volume
+with the checked-in `frontend/package-lock.json`; host `node_modules` does not
+replace the container dependencies.
 
 Compose creates an internal network for the services. Django connects to
-PostgreSQL with `DATABASE_HOST=db`; `db` is the Compose service name and resolves
-inside that network. Local application access uses `http://localhost:8000/`.
+PostgreSQL with `DATABASE_HOST=db`, and Vite proxies `/api` requests to
+`http://web:8000`; `db` and `web` are Compose service names that resolve inside
+that network. Host access uses `http://localhost:8000/` for Django and
+`http://localhost:5173/` for React/Vite.
 
 ------------------------------------------------------------------------
 
@@ -53,7 +60,8 @@ docker version
 docker compose version
 ```
 
-Both local approaches run the same `web` and `db` service definitions.
+Both local approaches run the same `db`, `web`, and `frontend` service
+definitions.
 
 ------------------------------------------------------------------------
 
@@ -73,15 +81,16 @@ With Docker Compose:
 docker compose up --build -d
 ```
 
-`up` creates and starts the services. `--build` builds the Django image before
-starting it, and `-d` leaves both services running in the background. The command
-also pulls PostgreSQL 16 when needed, creates the internal network, and creates or
-reuses the `postgres_data` volume.
+`up` creates and starts the services. `--build` builds the Django and frontend
+development images, and `-d` leaves all three services running in the
+background. The command also pulls PostgreSQL 16 when needed, creates the
+internal network, and creates or reuses the named volumes.
 
-Open the backend at:
+Open the applications at:
 
 ```text
-http://localhost:8000/
+React/Vite: http://localhost:5173/
+Django:     http://localhost:8000/
 ```
 
 ------------------------------------------------------------------------
@@ -100,9 +109,10 @@ With Docker Compose:
 docker compose ps
 ```
 
-Expect both `web` and `db` to be running. If `db` is unavailable, Django cannot
-connect to PostgreSQL. If `web` is unavailable, the backend and proxied frontend
-API requests cannot reach port 8000.
+Expect `db`, `web`, and `frontend` to be running. If `db` is unavailable, Django
+cannot connect to PostgreSQL. If `web` is unavailable, the backend and proxied
+frontend API requests cannot reach port 8000. If `frontend` is unavailable, the
+Vite development UI cannot be reached on port 5173.
 
 To view service output, use `podman-compose logs` or `docker compose logs` and
 optionally name a service, such as `web`.
@@ -237,10 +247,23 @@ After resetting the volume, apply migrations again before using the application.
 # Development Notes
 
 -   Django listens on `0.0.0.0:8000` in the `web` container.
+-   Vite listens on `0.0.0.0:5173` in the `frontend` container. The frontend
+    source bind mount lets Vite observe host edits and provide hot module
+    replacement without rebuilding the image.
+-   Inside Compose, `VITE_API_PROXY_TARGET=http://web:8000` directs Vite's
+    `/api` proxy to Django over the Compose network. Native host Vite development
+    still defaults to `http://localhost:8000` when that variable is unset.
 -   PostgreSQL listens on port `5432` and persists data in `postgres_data`.
 -   `DATABASE_HOST=db` is correct inside the Compose network; it should not be
     replaced with `localhost` in the container configuration.
 -   Rebuild the Django image when its Dockerfile or Python dependency inputs
     change.
--   GitHub Actions uses `docker compose build`, `docker compose up -d`, and
-    `docker compose exec -T web pytest`, then tears the services down.
+-   Rebuild the frontend image when `frontend/Dockerfile.dev` changes. Frontend
+    dependency changes are synchronized from the lockfile by `npm ci` at
+    container startup.
+-   This container runs the Vite development server only. A future production
+    deployment may build the React application and publish its static assets to
+    dedicated frontend hosting instead.
+-   GitHub Actions runs frontend tests with its Node 24 setup, then builds and
+    starts only `web` and `db` for backend tests. It does not duplicate frontend
+    dependency installation or tests in the Compose frontend service.
