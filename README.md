@@ -89,7 +89,8 @@ The workflow:
 
 1.  Install locked frontend dependencies with Node.js 24
 2.  Run the Vitest frontend suite
-3.  Build and start the Docker Compose services
+3.  Build and start the `db` and `web` Docker Compose services for backend
+    integration testing
 4.  Run pytest inside the `web` container
 5.  Tear down the services
 
@@ -152,6 +153,20 @@ Testing: - pytest - pytest-django - Vitest - React Testing Library
 CI: - GitHub Actions - Docker Compose-based pipeline
 
 Future: - Stripe integration - Orders domain - Scheduling domain
+
+## Local Development
+
+The preferred local development workflow uses the shared Compose configuration
+to run the complete stack:
+
+-   PostgreSQL (`db`)
+-   Django / DRF (`web`)
+-   React / Vite (`frontend`)
+
+Start with [DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md) after cloning
+the repository. [DOCKER_SETUP.md](docs/DOCKER_SETUP.md) is the detailed Compose
+operations reference, and [UI_SETUP.md](docs/UI_SETUP.md) covers frontend-specific
+development and the optional native Vite workflow.
 
 ------------------------------------------------------------------------
 
