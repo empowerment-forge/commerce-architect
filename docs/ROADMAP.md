@@ -135,12 +135,12 @@ as future work are targets and do not describe current repository behavior.
 
 ### Developer + Adopter Experience
 
-- **IN PROGRESS:** Move the Django/DRF backend from the repository root into
-  `backend/`, making it a sibling of `frontend/`. This is a structural refactor
-  only: runtime behavior, APIs, Compose, CI, database behavior, tests, and
-  frontend behavior must remain unchanged. The boundary also prepares the
-  project for future component-specific licensing and possible repository
-  extraction.
+- **COMPLETE:** The Django / DRF backend now lives under `backend/`, with
+  `backend/` and `frontend/` as explicit sibling application boundaries. The
+  refactor preserved runtime behavior, APIs, Compose topology, CI behavior,
+  database state, tests, and frontend behavior. This structure prepares
+  Commerce Architect for future component-specific licensing and possible
+  repository extraction.
 - Establish a repeatable local development workflow and document it in a future
   `DEV_WORKFLOW.md`.
 - Introduce a small task command surface, potentially including `dev-up`,
