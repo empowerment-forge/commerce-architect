@@ -13,11 +13,11 @@ documents.
     -   Podman with Podman Compose on Linux, including Pop!_OS
     -   Docker Desktop with Docker Compose, including Windows development through
         WSL2
-3.  Follow [DOCKER_SETUP.md](DOCKER_SETUP.md) to build the backend containers,
-    start PostgreSQL and Django, apply migrations, and optionally create an admin
-    user.
-4.  Follow [UI_SETUP.md](UI_SETUP.md) to install frontend dependencies, run
-    Vitest, and start the React/Vite development server.
+3.  Follow [DOCKER_SETUP.md](DOCKER_SETUP.md) to build and start PostgreSQL,
+    Django, and the React/Vite development server, apply migrations, and
+    optionally create an admin user.
+4.  Follow [UI_SETUP.md](UI_SETUP.md) for frontend container behavior, testing,
+    hot reload, and the optional native Vite workflow.
 
 The repository's Compose file supports both documented local runtimes. GitHub
 Actions CI uses Docker Compose.
@@ -36,12 +36,12 @@ documented as current commands yet.
 
 ## Normal Development Sequence
 
-1.  Start the `web` and `db` backend containers with the commands in
+1.  Start the `db`, `web`, and `frontend` containers with the commands in
     [DOCKER_SETUP.md](DOCKER_SETUP.md).
-2.  Verify both services are running and confirm the backend responds on port
-    8000.
-3.  Enter `frontend/` and start Vite as described in
-    [UI_SETUP.md](UI_SETUP.md).
+2.  Verify all three services are running and confirm Django responds on port
+    8000 and Vite responds on port 5173.
+3.  Edit the bind-mounted frontend source normally; the Vite container provides
+    hot module replacement without rebuilding the image.
 4.  Run the relevant test suites: pytest in the backend container and Vitest from
     the frontend project.
 5.  Make focused changes on the appropriate feature branch, follow the repository
