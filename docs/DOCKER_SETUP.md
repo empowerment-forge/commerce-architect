@@ -34,6 +34,18 @@ PostgreSQL with `DATABASE_HOST=db`, and Vite proxies `/api` requests to
 that network. Host access uses `http://localhost:8000/` for Django and
 `http://localhost:5173/` for React/Vite.
 
+```text
+Host browser                         Compose network
+
+localhost:5173 -> React/Vite         frontend -> http://web:8000 -> Django
+localhost:8000 -> Django             Django   -> db             -> PostgreSQL
+```
+
+`web:8000` is internal Compose service addressing. It does not conflict with
+`localhost:8000`, which is the published host port used by a browser or other
+host tool. When Vite runs in Compose, it accepts the browser's `/api` request on
+port 5173 and forwards that request to Django at `web:8000`.
+
 ------------------------------------------------------------------------
 
 # Choose a Local Runtime
@@ -114,8 +126,40 @@ cannot connect to PostgreSQL. If `web` is unavailable, the backend and proxied
 frontend API requests cannot reach port 8000. If `frontend` is unavailable, the
 Vite development UI cannot be reached on port 5173.
 
-To view service output, use `podman-compose logs` or `docker compose logs` and
-optionally name a service, such as `web`.
+The developer command quick reference below includes commands for all logs and
+individual service logs.
+
+------------------------------------------------------------------------
+
+# Developer Command Quick Reference
+
+Run these commands from the repository root. Use the command column for the
+runtime selected during onboarding.
+
+| Operation | Podman Compose | Docker Compose |
+| --- | --- | --- |
+| Build and start the complete stack | `podman-compose up --build -d` | `docker compose up --build -d` |
+| Start existing containers | `podman-compose start` | `docker compose start` |
+| Stop containers without removing them | `podman-compose stop` | `docker compose stop` |
+| Stop and remove containers and the network | `podman-compose down` | `docker compose down` |
+| Show service status | `podman-compose ps` | `docker compose ps` |
+| Follow all logs | `podman-compose logs -f` | `docker compose logs -f` |
+| Follow Django logs | `podman-compose logs -f web` | `docker compose logs -f web` |
+| Follow frontend logs | `podman-compose logs -f frontend` | `docker compose logs -f frontend` |
+| Run backend tests | `podman-compose exec -T web pytest` | `docker compose exec -T web pytest` |
+| Run frontend tests | `podman-compose exec -T frontend npm run test -- --run` | `docker compose exec -T frontend npm run test -- --run` |
+| Build the frontend | `podman-compose exec -T frontend npm run build` | `docker compose exec -T frontend npm run build` |
+| Lint the frontend | `podman-compose exec -T frontend npm run lint` | `docker compose exec -T frontend npm run lint` |
+| Apply Django migrations | `podman-compose exec web python manage.py migrate` | `docker compose exec web python manage.py migrate` |
+| Open the Django shell | `podman-compose exec web python manage.py shell` | `docker compose exec web python manage.py shell` |
+| Synchronize changed frontend dependencies | `podman-compose restart frontend` | `docker compose restart frontend` |
+
+After a Dockerfile, Compose service, or other image-build change, rebuild and
+recreate the stack with `podman-compose down` followed by
+`podman-compose up --build -d`, or the equivalent Docker Compose commands. A
+normal source-code edit does not require a rebuild because the repository and
+frontend source are bind-mounted. A frontend lockfile change requires only a
+frontend restart; startup `npm ci` synchronizes the dependency volume.
 
 ------------------------------------------------------------------------
 
@@ -202,7 +246,23 @@ Useful `psql` commands include:
 
 ------------------------------------------------------------------------
 
-# Stop Containers
+# Stop and Remove Containers
+
+`stop` stops the project containers but keeps them available for a later
+`start`. It does not remove containers, the Compose network, or named volumes:
+
+```bash
+podman-compose stop
+```
+
+or:
+
+```bash
+docker compose stop
+```
+
+`down` stops and removes the project containers and Compose network. It preserves
+named volumes when `-v` is omitted:
 
 With Podman Compose:
 
@@ -216,15 +276,18 @@ With Docker Compose:
 docker compose down
 ```
 
-`down` stops and removes the project containers and network while preserving the
-named PostgreSQL volume.
+Normal shutdown should use `stop` or `down` without `-v`. Both preserve the
+PostgreSQL data volume and frontend dependency volume.
 
 ------------------------------------------------------------------------
 
-# Full Reset (Destructive)
+# Full Volume Reset (Destructive)
 
-Warning: adding `-v` deletes the named PostgreSQL volume and all local database
-data. Use this only when a complete database reset is intentional.
+**Warning:** `down -v` stops and removes the containers and network **and deletes
+the project's named volumes**. This destroys the PostgreSQL development data in
+`postgres_data` as well as the replaceable frontend dependency volume. It is not
+a normal shutdown command. Use it only when a complete local data reset is
+intentional.
 
 With Podman Compose:
 
@@ -259,11 +322,15 @@ After resetting the volume, apply migrations again before using the application.
 -   Rebuild the Django image when its Dockerfile or Python dependency inputs
     change.
 -   Rebuild the frontend image when `frontend/Dockerfile.dev` changes. Frontend
-    dependency changes are synchronized from the lockfile by `npm ci` at
-    container startup.
+    dependency changes are synchronized from `frontend/package-lock.json` by
+    `npm ci` at container startup. Restarting `frontend` is sufficient after a
+    lockfile change; deleting `frontend_node_modules` is not normally necessary.
 -   This container runs the Vite development server only. A future production
     deployment may build the React application and publish its static assets to
-    dedicated frontend hosting instead.
+    dedicated frontend or static hosting instead. Likewise, local containerized
+    PostgreSQL does not require production to use a PostgreSQL container; a
+    managed PostgreSQL service remains a valid future choice. Production hosting
+    is intentionally undecided.
 -   GitHub Actions runs frontend tests with its Node 24 setup, then builds and
     starts only `web` and `db` for backend tests. It does not duplicate frontend
     dependency installation or tests in the Compose frontend service.

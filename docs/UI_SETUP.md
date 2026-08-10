@@ -3,8 +3,8 @@
 ## Purpose
 
 This document is the practical setup and daily-use reference for the Commerce
-Architect frontend. It explains how to install its dependencies, run its tests,
-start and view the development server, and stop it when finished.
+Architect frontend. It explains the preferred Compose-managed workflow, frontend
+checks, live development behavior, and the optional native Vite workflow.
 
 ## Frontend stack
 
@@ -20,7 +20,7 @@ The frontend uses:
 The frontend is an independent Node project under `frontend/`. Its npm scripts,
 dependencies, and lockfile are separate from the Django backend.
 
-## Preferred Compose workflow
+## Preferred Development Mode: Compose
 
 The preferred local workflow runs PostgreSQL, Django, and the Vite development
 server together through Compose. From the repository root, follow
@@ -40,26 +40,39 @@ The frontend is then available at `http://localhost:5173/`. Its source directory
 is bind-mounted into the container, so Vite detects host edits and provides hot
 module replacement without an image rebuild.
 
+The frontend implementation remains entirely under `frontend/`, while Vite runs
+inside the Compose container named `commerce_frontend`.
+
 The frontend image uses Node.js 24 and installs dependencies with `npm ci` from
 `frontend/package-lock.json`. A separate `frontend_node_modules` volume mounted
 at `/app/node_modules` prevents the source bind mount from replacing the
 container's Linux dependencies. The startup command runs `npm ci` so this volume
-stays synchronized with the lockfile. No host-global frontend dependency install
-is required for the Compose workflow.
+stays synchronized with the lockfile. Host-side `npm install` or `npm ci` is not
+required for the Compose workflow.
 
-## Optional native frontend workflow
+For frontend checks in the preferred mode, run the npm scripts inside the
+container from the repository root:
+
+```bash
+docker compose exec -T frontend npm run test -- --run
+docker compose exec -T frontend npm run build
+docker compose exec -T frontend npm run lint
+```
+
+Use `podman-compose` in place of `docker compose` for the Podman workflow.
+
+## Optional Development Mode: Native Vite
 
 Running Vite directly on the host remains supported when useful. This optional
 workflow requires Node.js 24 and npm on the host, plus the Compose `web` and `db`
 services for API-backed UI functionality.
-
-## Install frontend dependencies
 
 From the repository root:
 
 ```bash
 cd frontend
 npm ci
+npm run dev
 ```
 
 `cd frontend` enters the independent frontend project. `npm ci` performs a clean,
@@ -69,10 +82,13 @@ does not agree with `package.json`. Because it installs the exact dependency tre
 recorded in the checked-in lockfile, it is preferred over a general `npm install`
 when reproducing the repository's known environment.
 
-Run `npm ci` after cloning the repository and whenever the checked-in frontend
-dependency files change.
+For this optional native mode, run `npm ci` after cloning the repository and
+whenever the checked-in frontend dependency files change. `npm run dev` starts
+Vite on `http://localhost:5173/`. When `VITE_API_PROXY_TARGET` is unset, native
+Vite proxies `/api` to `http://localhost:8000`, where the Compose `web` service is
+published to the host.
 
-## Run frontend tests
+## Native Frontend Commands
 
 From `frontend/`, run the complete test suite once:
 
@@ -95,19 +111,6 @@ npm run test:watch
 
 That script invokes `vitest --watch`. Vitest runs the tests and stays active,
 rerunning relevant tests as files change. Press `Ctrl+C` to leave watch mode.
-
-## Start the development server natively
-
-From `frontend/`:
-
-```bash
-npm run dev
-```
-
-The `dev` script invokes Vite. Vite starts the local development server, serves
-the React application, and updates the browser as frontend files change. Keep
-this terminal running while working with the UI. This is the native alternative
-to the preferred Compose-managed frontend service.
 
 ## View the application
 
@@ -169,8 +172,8 @@ podman-compose ps
 ```
 
 Use the container tooling already established for your development environment.
-See [DOCKER_SETUP.md](DOCKER_SETUP.md) for the repository's backend startup and
-shutdown workflow.
+See [DOCKER_SETUP.md](DOCKER_SETUP.md) for the complete development stack's
+startup, shutdown, status, logs, and test commands.
 
 ## Stop the frontend
 
@@ -179,10 +182,10 @@ repository root with `docker compose down` or `podman-compose down`. For native
 Vite, press `Ctrl+C` in the terminal running `npm run dev`; this stops only the
 host Vite process.
 
-## Useful npm commands
+## Optional Native npm Commands
 
-Run these commands from `frontend/`. This list reflects the scripts currently
-defined in `frontend/package.json`.
+When using the optional native mode, run these commands from `frontend/`. This
+list reflects the scripts currently defined in `frontend/package.json`.
 
 | Command | Purpose |
 | --- | --- |
@@ -203,11 +206,13 @@ A normal frontend session is:
 2. Browse to `http://localhost:5173/` and work with the product-list UI; Vite
    reloads the browser as bind-mounted frontend source changes.
 3. Run frontend checks through the container when needed, for example
-   `docker compose exec frontend npm run test -- --run` (or the equivalent
+   `docker compose exec -T frontend npm run test -- --run` (or the equivalent
    Podman Compose command).
 4. Stop the stack with the Compose `down` command for the selected runtime.
 
 This local development container is not a production frontend deployment
 decision. A future production environment may build the React application and
 host the resulting assets through a dedicated frontend or static hosting
-provider instead of running Vite.
+provider instead of running Vite. Local containerized PostgreSQL likewise does
+not determine the production database deployment model; managed PostgreSQL
+remains a valid future option.
