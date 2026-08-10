@@ -28,6 +28,11 @@ for live source edits. At startup, `npm ci` synchronizes that dependency volume
 with the checked-in `frontend/package-lock.json`; host `node_modules` does not
 replace the container dependencies.
 
+The Django image is built from `./backend`, and that directory is bind-mounted
+at `/app` in the `web` container. The React/Vite image and bind mount continue to
+use `./frontend`. Compose orchestration remains in `docker-compose.yml` at the
+repository root.
+
 Compose creates an internal network for the services. Django connects to
 PostgreSQL with `DATABASE_HOST=db`, and Vite proxies `/api` requests to
 `http://web:8000`; `db` and `web` are Compose service names that resolve inside
@@ -154,12 +159,14 @@ runtime selected during onboarding.
 | Open the Django shell | `podman-compose exec web python manage.py shell` | `docker compose exec web python manage.py shell` |
 | Synchronize changed frontend dependencies | `podman-compose restart frontend` | `docker compose restart frontend` |
 
-After a Dockerfile, Compose service, or other image-build change, rebuild and
+After `backend/Dockerfile`, a Compose service, or another image-build change,
+rebuild and
 recreate the stack with `podman-compose down` followed by
 `podman-compose up --build -d`, or the equivalent Docker Compose commands. A
-normal source-code edit does not require a rebuild because the repository and
-frontend source are bind-mounted. A frontend lockfile change requires only a
-frontend restart; startup `npm ci` synchronizes the dependency volume.
+normal source-code edit does not require a rebuild because the backend and
+frontend source directories are bind-mounted. A frontend lockfile change
+requires only a frontend restart; startup `npm ci` synchronizes the dependency
+volume.
 
 ------------------------------------------------------------------------
 
@@ -319,8 +326,8 @@ After resetting the volume, apply migrations again before using the application.
 -   PostgreSQL listens on port `5432` and persists data in `postgres_data`.
 -   `DATABASE_HOST=db` is correct inside the Compose network; it should not be
     replaced with `localhost` in the container configuration.
--   Rebuild the Django image when its Dockerfile or Python dependency inputs
-    change.
+-   Rebuild the Django image when `backend/Dockerfile` or Python dependency
+    inputs in `backend/` change.
 -   Rebuild the frontend image when `frontend/Dockerfile.dev` changes. Frontend
     dependency changes are synchronized from `frontend/package-lock.json` by
     `npm ci` at container startup. Restarting `frontend` is sufficient after a
