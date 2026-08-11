@@ -177,6 +177,15 @@ to run the complete stack:
 -   Django / DRF (`web`)
 -   React / Vite (`frontend`)
 
+The checked-in Compose file is explicitly a development configuration. It
+supplies labeled local-only Django and PostgreSQL values so
+`podman-compose up --build -d` and `docker compose up --build -d` remain
+convenient. Production uses `COMMERCE_ENV=production` and fails startup when its
+required secret, host, or database configuration is absent or unsafe. See
+[DOCKER_SETUP.md](docs/DOCKER_SETUP.md) for the environment-variable and Django
+deployment-check reference. [`.env.example`](.env.example) contains safe local
+examples only.
+
 Start with [DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md) after cloning
 the repository. [DOCKER_SETUP.md](docs/DOCKER_SETUP.md) is the detailed Compose
 operations reference, and [UI_SETUP.md](docs/UI_SETUP.md) covers frontend-specific

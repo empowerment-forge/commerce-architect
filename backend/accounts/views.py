@@ -13,7 +13,6 @@ from .serializers import RegisterSerializer
 
 
 REFRESH_COOKIE_NAME = "refresh_token"
-REFRESH_COOKIE_PATH = "/api/auth/"
 
 
 def set_refresh_cookie(response, refresh_token):
@@ -22,10 +21,10 @@ def set_refresh_cookie(response, refresh_token):
         key=REFRESH_COOKIE_NAME,
         value=refresh_token,
         max_age=int(refresh_lifetime.total_seconds()),
-        httponly=True,
-        secure=True,
-        samesite="Strict",
-        path=REFRESH_COOKIE_PATH,
+        httponly=settings.REFRESH_COOKIE_HTTPONLY,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+        path=settings.REFRESH_COOKIE_PATH,
     )
 
 
@@ -98,8 +97,8 @@ class LogoutView(APIView):
         response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
         response.delete_cookie(
             key=REFRESH_COOKIE_NAME,
-            path=REFRESH_COOKIE_PATH,
-            samesite="Strict",
+            path=settings.REFRESH_COOKIE_PATH,
+            samesite=settings.REFRESH_COOKIE_SAMESITE,
         )
         return response
 

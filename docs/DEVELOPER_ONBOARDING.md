@@ -39,10 +39,12 @@ PostgreSQL.
     docker compose version
     ```
 
-3.  No additional frontend configuration is required for the preferred Compose
-    workflow. Compose supplies the development API proxy target and database
-    connection settings. Host-side `npm install` or `npm ci` is **not required**;
-    the frontend container installs the locked dependencies.
+3.  No environment file is required for the preferred Compose workflow.
+    Compose explicitly selects `COMMERCE_ENV=development` and supplies labeled
+    development-only Django, PostgreSQL, and API-proxy values. Host-side
+    `npm install` or `npm ci` is **not required**; the frontend container
+    installs the locked dependencies. Copy `.env.example` to `.env` only when
+    local overrides are needed, and never reuse its values in production.
 
 4.  Build and start the complete stack from the repository root:
 
@@ -78,6 +80,13 @@ PostgreSQL.
 
 The repository's Compose file supports both documented local runtimes. GitHub
 Actions CI uses Docker Compose.
+
+The checked-in Compose file is for local development, not production. A
+production deployment must set `COMMERCE_ENV=production` and provide its own
+strong `DJANGO_SECRET_KEY`, deployment hostnames, and database credentials.
+Django rejects missing or known development values instead of falling back.
+See [DOCKER_SETUP.md](DOCKER_SETUP.md) for the complete variable reference and
+deployment-check command.
 
 This guide documents the current multi-step setup. A future
 `DEV_WORKFLOW.md` and smaller standardized command surface are intended to

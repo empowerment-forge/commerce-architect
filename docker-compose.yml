@@ -5,9 +5,9 @@ services:
     container_name: commerce_db
     restart: always
     environment:
-      POSTGRES_USER: commerce
-      POSTGRES_PASSWORD: commercepass
-      POSTGRES_DB: commerce_db
+      POSTGRES_USER: ${POSTGRES_USER:-commerce}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-commercepass}
+      POSTGRES_DB: ${POSTGRES_DB:-commerce_db}
     ports:
       - "5432:5432"
     volumes:
@@ -24,10 +24,16 @@ services:
     depends_on:
       - db
     environment:
+      COMMERCE_ENV: development
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-development-only-not-for-production}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1],web,testserver}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
       DATABASE_HOST: db
-      DATABASE_NAME: commerce_db
-      DATABASE_USER: commerce
-      DATABASE_PASSWORD: commercepass
+      DATABASE_NAME: ${POSTGRES_DB:-commerce_db}
+      DATABASE_USER: ${POSTGRES_USER:-commerce}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-commercepass}
+      DATABASE_PORT: "5432"
 
   frontend:
     build:
@@ -43,7 +49,7 @@ services:
     depends_on:
       - web
     environment:
-      VITE_API_PROXY_TARGET: http://web:8000
+      VITE_API_PROXY_TARGET: ${VITE_API_PROXY_TARGET:-http://web:8000}
 
 volumes:
   postgres_data:

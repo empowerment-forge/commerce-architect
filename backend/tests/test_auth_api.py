@@ -1,4 +1,5 @@
 import pytest
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import Client
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -61,9 +62,9 @@ def test_token_obtain_success_sets_refresh_cookie(client):
     refresh_cookie = response.cookies["refresh_token"]
     assert refresh_cookie.value
     assert refresh_cookie["httponly"]
-    assert refresh_cookie["secure"]
-    assert refresh_cookie["samesite"] == "Strict"
-    assert refresh_cookie["path"] == "/api/auth/"
+    assert bool(refresh_cookie["secure"]) is settings.REFRESH_COOKIE_SECURE
+    assert refresh_cookie["samesite"] == settings.REFRESH_COOKIE_SAMESITE
+    assert refresh_cookie["path"] == settings.REFRESH_COOKIE_PATH
     assert refresh_cookie["max-age"] == 7 * 24 * 60 * 60
 
 

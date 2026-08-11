@@ -65,13 +65,21 @@ The access token is not placed in a cookie by the current backend.
 -   Lifetime: 7 days
 -   Cookie name: `refresh_token`
 -   `HttpOnly`: enabled, so frontend JavaScript cannot read the token
--   `Secure`: enabled, so the browser sends it only over a secure connection
+-   `Secure`: disabled only for `COMMERCE_ENV=development` so local HTTP works;
+    always enabled in production
 -   `SameSite`: `Strict`
 -   Path: `/api/auth/`, limiting the cookie to authentication endpoints
 
 The refresh token is not returned in response JSON. The browser manages the
 cookie and sends it to the refresh and logout endpoints when the request meets
 the cookie's security and path rules.
+
+The current Vite development proxy makes browser `/api` requests same-origin,
+so no permissive CORS policy is required. `SameSite=Strict` is retained as a
+strong CSRF boundary for the refresh cookie. Production is expected to route
+the browser and API through an appropriate same-origin HTTPS boundary; a future
+separate-origin or cross-site deployment requires explicit CORS and CSRF review
+rather than weakening the cookie by default.
 
 ## Rotation, Blacklisting, and Logout
 
@@ -92,8 +100,9 @@ continues to use signed JWT authentication.
 
 1.  The user submits credentials to `POST /api/auth/token/`.
 2.  Django validates the credentials.
-3.  Django returns the 10-minute access token in JSON and sets the 7-day secure,
-    HttpOnly refresh token cookie.
+3.  Django returns the 10-minute access token in JSON and sets the 7-day
+    HttpOnly refresh token cookie. It is `Secure` in production and local-HTTP
+    compatible in development.
 4.  The frontend retains the access token in memory and sends it in the Bearer
     authorization header for protected requests such as `GET /api/auth/me/`.
 5.  When a new access token is needed, the frontend calls
