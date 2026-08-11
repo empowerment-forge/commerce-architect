@@ -82,10 +82,63 @@ backend capability today, not yet a complete user-facing experience.
 - API integration for products
 - Authentication UI and state not yet implemented
 
-## Authentication Focus
+## Current Priority: Production-Style Development Deployment
 
-Authentication and the broader account lifecycle are the current major
-implementation focus. The existing backend foundation includes:
+The current top development priority is to launch and operate Commerce
+Architect at [https://dev-commerce.empowerment-forge.com](https://dev-commerce.empowerment-forge.com).
+This is an internet-facing, production-style **non-production** environment on
+Railway. It must use HTTPS, non-production credentials, no real customer data,
+and real controls for security, deployment, recovery, and operations.
+
+Additional commerce and business-domain development—including Orders,
+Inventory, Checkout, and Payments—is temporarily secondary. Priority returns
+to those domains only after the existing platform has been deployed securely,
+tested, operated, recovered, and updated successfully in the development
+deployment.
+
+The authoritative architecture and implementation guide for this milestone is
+[BUILD_DEPLOY.md](BUILD_DEPLOY.md). This roadmap defines priority and milestone
+outcomes; GitHub issues and that guide should hold detailed implementation
+decisions and procedures.
+
+### Deployment Milestone
+
+The milestone is complete only when the team has:
+
+- Understood and documented the current runtime architecture.
+- Defined the frontend production artifact and serving topology.
+- Defined the backend production artifact/container and production application
+  server.
+- Defined the PostgreSQL deployment and persistence model.
+- Defined environment-specific configuration and secrets handling.
+- Prepared the Railway project and development environment.
+- Configured `dev-commerce.empowerment-forge.com` and mandatory HTTPS/TLS.
+- Established CI build gates and a controlled deployment pipeline.
+- Established a reviewed database migration procedure.
+- Established post-deployment health checks, frontend/API smoke tests, and
+  real-HTTPS authentication/JWT validation.
+- Established application and database rollback procedures.
+- Established useful logging, health visibility, monitoring, and alerting
+  without leaking sensitive data.
+- Established dependency scanning, static/security analysis, and
+  container/image scanning where applicable.
+- Established OWASP-oriented application security testing and a repeatable
+  penetration-testing process for the internet-facing environment.
+- Protected sensitive data in the database, logs, backups, and configuration.
+- Defined backup policy and successfully tested restoration.
+- Documented launch, deployment, rollback, recovery, credential rotation, and
+  incident-oriented operational procedures.
+- Demonstrated that the environment can be securely built, deployed, tested,
+  operated, updated, rolled back, and recovered.
+
+Only after these outcomes are met does priority return to Orders and other
+business domains.
+
+## Existing Authentication Foundation
+
+Authentication and the broader account lifecycle remain important platform
+work, especially where required to secure and validate the hosted environment.
+The existing backend foundation includes:
 
 - Registration endpoint
 - Login/token endpoint
@@ -112,10 +165,10 @@ Django-native solution should provide portions of the account lifecycle. This
 roadmap does not decide whether the current SimpleJWT approach will be retained
 or replaced; that decision must follow the architectural assessment.
 
-## Near-Term Roadmap
+## Supporting Workstreams
 
-Three foundational workstreams are active in parallel. The capabilities listed
-as future work are targets and do not describe current repository behavior.
+These workstreams support the deployment milestone or remain queued behind it.
+Capabilities listed as future work do not describe current repository behavior.
 
 ### Authentication / Account Architecture
 
@@ -168,10 +221,10 @@ cleanup task. This workstream includes:
 - Issue and contributor hygiene
 - A final repository visibility review
 
-### Continuing Product and Production Work
+### Deferred Product Work and Supporting Hardening
 
-- Return to orders, checkout, payments, and the guest-to-account flow
-  represented by
+- After the deployment milestone, return to orders, checkout, payments, and the
+  guest-to-account flow represented by
   [issue #9](https://github.com/empowerment-forge/commerce-architect/issues/9).
 - Harden production deployment and security. Production Django settings are
   tracked in
@@ -184,9 +237,11 @@ roadmap records only how they fit into the larger implementation sequence.
 
 ## Future Commerce Work
 
-Authentication is foundational work, not the platform's ultimate product goal.
-Once the identity and account foundation is sufficiently complete, development
-should return to broader commerce capabilities, including:
+Deployment and authentication are foundational work, not the platform's
+ultimate product goal. Once the production-style development deployment
+milestone is complete and the identity foundation is sufficient for its secure
+operation, development should return to broader commerce capabilities,
+including:
 
 - Orders domain
 - Checkout
