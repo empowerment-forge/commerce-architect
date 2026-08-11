@@ -342,13 +342,21 @@ At the time of the audit, `npm audit` reported:
 - 2 moderate
 - 2 low
 
-Directly implicated tooling included Vitest, Vite, and PostCSS. Remediation must
-be performed through a dedicated, reviewed dependency change rather than by
-automatic audit fixes.
+Directly implicated tooling included Vitest, Vite, and PostCSS. The findings
+affected development, build, test, and lint tooling rather than the shipped
+React runtime dependencies.
 
-`backend/requirements.txt` is not fully deterministic. A Python vulnerability
-scanner was unavailable during the audit, so Python locking/constraints and
-automated vulnerability auditing remain planned work.
+The focused remediation updated Vitest, Vite, and PostCSS within their existing
+major versions and refreshed vulnerable transitive resolutions without using a
+forced upgrade. The current `npm audit` result is zero vulnerabilities: no
+critical, high, moderate, or low findings remain.
+
+A disposable `pip-audit` scan of `backend/requirements.txt` found no known
+Python vulnerabilities. The requirements file is not fully deterministic:
+most direct dependencies are not pinned exactly and transitive versions are not
+locked. A repeatable Python audit and a reviewed lock or constraints strategy
+remain planned work. Weekly Dependabot checks now cover frontend npm, backend
+pip, and GitHub Actions dependencies.
 
 ### Django Deployment Posture
 
@@ -450,20 +458,23 @@ infrastructure and final production-deployment checks stay open.
 
 ### Phase 4 — Dependency Security
 
-**BLOCKER BEFORE PUBLIC for unaccepted critical/high findings**
+**IN PROGRESS:** Current npm and Python scans have no known findings; Python
+determinism and repeatable auditing remain open.
 
-- [ ] Assess every npm critical and high advisory.
-- [ ] Upgrade affected frontend dependencies through reviewed changes.
-- [ ] Run frontend tests.
-- [ ] Run the frontend build.
-- [ ] Run frontend lint.
-- [ ] Run backend tests.
-- [ ] Run `npm audit` again.
-- [ ] Establish Python vulnerability auditing.
+- [x] Assess every npm critical and high advisory.
+- [x] Upgrade affected frontend dependencies through reviewed changes.
+- [x] Run frontend tests.
+- [x] Run the frontend build.
+- [x] Run frontend lint.
+- [x] Run backend tests.
+- [x] Run `npm audit` again; zero vulnerabilities remain.
+- [x] Establish a current Python vulnerability baseline with `pip-audit`; no
+  known vulnerabilities were found.
+- [ ] Add a repeatable Python vulnerability audit to the maintained workflow.
 - [ ] Decide and implement a Python lock or constraints strategy.
-- [ ] Add automated dependency updates where appropriate.
-- [ ] Document explicitly accepted residual findings, their scope, and review
-  date.
+- [x] Add weekly Dependabot updates for npm, pip, and GitHub Actions.
+- [x] Confirm no critical/high npm or Python audit finding requires residual
+  acceptance at this review.
 
 ### Phase 5 — Public Open-Source Front Door
 
