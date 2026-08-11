@@ -321,12 +321,17 @@ revalidated before publication.
 
 ### Development Configuration
 
-- Django contains a committed development `SECRET_KEY`.
-- Compose contains fixed development PostgreSQL credentials.
-- These are development defaults but must not be usable accidentally in
-  production.
-- No `.env.example` exists.
-- `.gitignore` needs broader environment, cache, coverage, IDE, and OS patterns.
+- Django reads security-sensitive configuration from the environment and uses
+  an explicit `COMMERCE_ENV` boundary.
+- Compose is explicitly development-only and supplies labeled local Django and
+  PostgreSQL values for a convenient local workflow.
+- Production rejects missing or unsafe secrets, debug mode, missing or
+  development-only hosts, incomplete database settings, and the known local
+  database password.
+- `.env.example` contains safe development examples only.
+- `.gitignore` excludes secret-bearing environment variants, Python virtual
+  environments and caches, coverage artifacts, and common local metadata while
+  keeping `.env.example` tracked.
 
 ### Dependency Security
 
@@ -347,7 +352,8 @@ automated vulnerability auditing remain planned work.
 
 ### Django Deployment Posture
 
-`backend/manage.py check --deploy` reported development-oriented warnings for:
+`backend/manage.py check --deploy` in development reports expected local-only
+warnings for:
 
 - The development `SECRET_KEY`
 - `DEBUG=True`
@@ -357,8 +363,13 @@ automated vulnerability auditing remain planned work.
 - A session cookie not marked secure
 - A CSRF cookie not marked secure
 
-These settings are acceptable only for local development and must not be
-mistaken for production configuration.
+These warnings are expected only because local HTTP development intentionally
+uses a labeled development key, debug mode, and non-secure session/CSRF cookies.
+Production fixes the secret, debug, host, HTTPS redirect, and cookie findings by
+default. A production-mode deployment check currently reports only HSTS warning
+`security.W004`; HSTS remains explicitly deferred until the production domain
+and HTTPS behavior are verified. HSTS subdomain and preload behavior must not be
+enabled blindly.
 
 ### Public Documentation and Community Files
 
@@ -366,7 +377,8 @@ mistaken for production configuration.
 - Documentation contains conflicting production-readiness language.
 - Public readers need a clearer distinction among current implementation,
   frozen architecture, and aspirational design.
-- `LICENSE`, `SECURITY.md`, and `CONTRIBUTING.md` are absent and are
+- `LICENSE.md`, component license files, and `CONTRIBUTING.md` now exist.
+- `SECURITY.md` and a private vulnerability-reporting path remain
   pre-publication priorities.
 - `CODE_OF_CONDUCT.md`, issue templates, and a pull-request template are absent
   and may be completed before or soon after publication as appropriate.
@@ -418,19 +430,23 @@ where they have not yet been fully verified.
 
 ### Phase 3 — Security and Configuration Hygiene
 
-**BLOCKER BEFORE PUBLIC**
+**IN PROGRESS:** Django configuration hardening is implemented; the remaining
+infrastructure and final production-deployment checks stay open.
 
-- [ ] Move Django `SECRET_KEY` to environment-backed configuration.
-- [ ] Separate safe development defaults from production requirements.
-- [ ] Ensure production configuration fails closed.
-- [ ] Add `.env.example` or an equivalent safe template.
-- [ ] Confirm the example file contains no real credentials.
-- [ ] Expand `.gitignore` for environment variants, Python environments,
+- [x] Move Django `SECRET_KEY` to environment-backed configuration.
+- [x] Separate safe development defaults from production requirements.
+- [x] Ensure production configuration fails closed.
+- [x] Add `.env.example` with safe local-development examples.
+- [x] Confirm the example file contains no real credentials.
+- [x] Expand `.gitignore` for environment variants, Python environments,
   caches, coverage, IDE state, and OS metadata.
 - [ ] Review PostgreSQL host-port exposure.
-- [ ] Confirm no development password can be accidentally reused in production.
-- [ ] Re-run Django deployment security checks.
-- [ ] Document remaining development-only warnings and production requirements.
+- [x] Reject the known development database password in production mode.
+- [x] Re-run Django deployment security checks in development and production
+  modes.
+- [x] Document remaining development-only warnings and production requirements.
+- [ ] Run the deployment check against the final production platform and domain.
+- [ ] Decide and enable HSTS only after HTTPS behavior is verified.
 
 ### Phase 4 — Dependency Security
 

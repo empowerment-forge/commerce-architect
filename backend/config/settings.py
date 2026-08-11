@@ -10,25 +10,129 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
-import os
+from django.core.exceptions import ImproperlyConfigured
+
+
+def env_bool(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ImproperlyConfigured(
+        f"{name} must be one of: true, false, 1, 0, yes, no, on, off."
+    )
+
+
+def env_csv(name, default=()):
+    value = os.environ.get(name)
+    if value is None:
+        return list(default)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def env_int(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be an integer.") from exc
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+# Environment and security configuration
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-@_+*7@yz162h-)xff2k%d!_#k#c!gw4@@-5r(_#ca&c#@^(1+='
+COMMERCE_ENV = os.environ.get("COMMERCE_ENV", "").strip().lower()
+if not COMMERCE_ENV:
+    raise ImproperlyConfigured(
+        "COMMERCE_ENV must be explicitly set to 'development' or 'production'."
+    )
+if COMMERCE_ENV not in {"development", "production"}:
+    raise ImproperlyConfigured(
+        "COMMERCE_ENV must be either 'development' or 'production'."
+    )
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+IS_PRODUCTION = COMMERCE_ENV == "production"
 
-ALLOWED_HOSTS = []
+if IS_PRODUCTION:
+    SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "").strip()
+    if (
+        len(SECRET_KEY) < 50
+        or len(set(SECRET_KEY)) < 5
+        or SECRET_KEY.startswith("django-insecure-")
+        or "changeme" in SECRET_KEY.lower()
+    ):
+        raise ImproperlyConfigured(
+            "Production requires a strong DJANGO_SECRET_KEY of at least 50 "
+            "characters and sufficient diversity; development keys and "
+            "placeholders are rejected."
+        )
+
+    if env_bool("DJANGO_DEBUG", False):
+        raise ImproperlyConfigured("DJANGO_DEBUG cannot be enabled in production.")
+    DEBUG = False
+
+    ALLOWED_HOSTS = env_csv("DJANGO_ALLOWED_HOSTS")
+    if not ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            "Production requires DJANGO_ALLOWED_HOSTS with at least one hostname."
+        )
+    if "*" in ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            "Production DJANGO_ALLOWED_HOSTS cannot contain the wildcard '*'."
+        )
+    development_hosts = {"localhost", "127.0.0.1", "[::1]", "web", "testserver"}
+    if not set(ALLOWED_HOSTS) - development_hosts:
+        raise ImproperlyConfigured(
+            "Production DJANGO_ALLOWED_HOSTS must include a deployment hostname."
+        )
+else:
+    SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "").strip()
+    if not SECRET_KEY:
+        raise ImproperlyConfigured(
+            "Development requires DJANGO_SECRET_KEY; the local Compose "
+            "workflow supplies a labeled development-only value."
+        )
+    DEBUG = env_bool("DJANGO_DEBUG", True)
+    ALLOWED_HOSTS = env_csv(
+        "DJANGO_ALLOWED_HOSTS",
+        ("localhost", "127.0.0.1", "[::1]", "web", "testserver"),
+    )
+
+CSRF_TRUSTED_ORIGINS = env_csv("DJANGO_CSRF_TRUSTED_ORIGINS")
+
+SESSION_COOKIE_SECURE = IS_PRODUCTION
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SECURE = IS_PRODUCTION
+CSRF_COOKIE_SAMESITE = "Lax"
+
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", IS_PRODUCTION)
+SECURE_HSTS_SECONDS = env_int("DJANGO_SECURE_HSTS_SECONDS", 0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    False,
+)
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
+
+if env_bool("DJANGO_TRUST_FORWARDED_PROTO", False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+REFRESH_COOKIE_SECURE = IS_PRODUCTION
+REFRESH_COOKIE_HTTPONLY = True
+REFRESH_COOKIE_SAMESITE = "Strict"
+REFRESH_COOKIE_PATH = "/api/auth/"
 
 
 # Application definition
@@ -83,6 +187,27 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+if IS_PRODUCTION:
+    missing_database_variables = [
+        name
+        for name in (
+            "DATABASE_HOST",
+            "DATABASE_NAME",
+            "DATABASE_USER",
+            "DATABASE_PASSWORD",
+        )
+        if not os.environ.get(name, "").strip()
+    ]
+    if missing_database_variables:
+        raise ImproperlyConfigured(
+            "Production requires database configuration: "
+            + ", ".join(missing_database_variables)
+        )
+    if os.environ["DATABASE_PASSWORD"] in {"commercepass", "changeme"}:
+        raise ImproperlyConfigured(
+            "Production rejects the known development DATABASE_PASSWORD."
+        )
+
 DATABASES = {
     'default': {
 #        'ENGINE': 'django.db.backends.sqlite3',
@@ -92,7 +217,7 @@ DATABASES = {
         "USER": os.environ.get("DATABASE_USER"),
         "PASSWORD": os.environ.get("DATABASE_PASSWORD"),
         "HOST": os.environ.get("DATABASE_HOST"),
-        "PORT": "5432",
+        "PORT": os.environ.get("DATABASE_PORT", "5432"),
     }
 }
 
