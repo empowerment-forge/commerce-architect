@@ -123,13 +123,13 @@ as future work are targets and do not describe current repository behavior.
   strategy before building additional user-facing authentication work.
 - Complete backend account-lifecycle and security capabilities, beginning with
   password-policy hardening tracked in
-  [issue #4](https://github.com/anthonylpeterson/commerce-architect/issues/4),
+  [issue #4](https://github.com/empowerment-forge/commerce-architect/issues/4),
   followed by the selected email verification, recovery, and lifecycle support.
 - Connect React to authentication and session state. The primary frontend slice
   is tracked in
-  [issue #5](https://github.com/anthonylpeterson/commerce-architect/issues/5),
+  [issue #5](https://github.com/empowerment-forge/commerce-architect/issues/5),
   with concurrent refresh coordination tracked separately in
-  [issue #6](https://github.com/anthonylpeterson/commerce-architect/issues/6).
+  [issue #6](https://github.com/empowerment-forge/commerce-architect/issues/6).
 - Complete coherent registration, login, logout, recovery, and verification
   flows, then add the selected MFA and stronger account-security capabilities.
 
@@ -172,12 +172,12 @@ cleanup task. This workstream includes:
 
 - Return to orders, checkout, payments, and the guest-to-account flow
   represented by
-  [issue #9](https://github.com/anthonylpeterson/commerce-architect/issues/9).
+  [issue #9](https://github.com/empowerment-forge/commerce-architect/issues/9).
 - Harden production deployment and security. Production Django settings are
   tracked in
-  [issue #7](https://github.com/anthonylpeterson/commerce-architect/issues/7),
+  [issue #7](https://github.com/empowerment-forge/commerce-architect/issues/7),
   and deterministic Python builds in
-  [issue #8](https://github.com/anthonylpeterson/commerce-architect/issues/8).
+  [issue #8](https://github.com/empowerment-forge/commerce-architect/issues/8).
 
 These issues are the source of detailed scope and acceptance criteria; the
 roadmap records only how they fit into the larger implementation sequence.

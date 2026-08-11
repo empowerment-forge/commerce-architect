@@ -14,8 +14,8 @@ finalizes its contributor-rights model.
 - Feature proposals
 - Forks and experimentation
 
-Security reports must follow `SECURITY.md` once that policy exists. Until then,
-do not disclose suspected vulnerabilities in a public issue.
+Security reports must follow [`SECURITY.md`](SECURITY.md). Do not disclose
+suspected vulnerabilities in a public issue.
 
 ## External Code Contributions
 

@@ -19,8 +19,9 @@ Current official repository:
 **COMPLETE:** The component-specific software licenses are selected and their
 license artifacts are present.
 
-**DECISION REQUIRED:** Final CLA and contributor-rights terms have not been
-selected.
+**CAN FOLLOW AFTER PUBLIC:** Final CLA and contributor-rights terms remain
+undecided. External code contributions remain paused until those terms are
+ready.
 
 Publication is more than making source files visible. Commerce Architect should
 become a genuine open-source commerce application platform that developers,
@@ -103,8 +104,10 @@ component.
 
 ## Licensing and Stewardship Study
 
-**IN PROGRESS:** Component licenses and license artifacts are established.
-Dependency and asset compatibility review and contributor terms remain open.
+**COMPLETE FOR INITIAL PUBLICATION:** Component licenses, license artifacts, and
+the repository license map are established. Broader legal, contributor, and
+license-inventory work can continue after publication while external code
+contributions remain paused.
 
 ### Selected Component Model
 
@@ -128,7 +131,12 @@ Dependency and asset compatibility review and contributor terms remain open.
 Business Source License 1.1 was not selected. It is source-available rather than
 an OSI open-source license and would represent a different philosophical choice.
 
-### Candidate Licenses
+### Post-Public Licensing Study
+
+The remaining study and policy items below are useful maturity work rather than
+immediate publication blockers.
+
+#### Candidate Licenses
 
 - [x] Evaluate Apache License 2.0.
 - [ ] Evaluate GPLv3.
@@ -137,7 +145,7 @@ an OSI open-source license and would represent a different philosophical choice.
 - [ ] Use MIT as a permissive baseline for comparison.
 - [ ] Use BSD 3-Clause as a permissive baseline for comparison.
 
-### Evaluation Dimensions
+#### Evaluation Dimensions
 
 For each candidate, document:
 
@@ -157,7 +165,7 @@ For each candidate, document:
 - [ ] Compatibility with current and likely future dependencies
 - [ ] Notice, source-distribution, and operational compliance burdens
 
-### Historical Case Studies
+#### Historical Case Studies
 
 Study both successful and painful long-term outcomes before selecting a model:
 
@@ -175,7 +183,7 @@ For each case, note the original goals, license/governance changes, community an
 vendor response, fork dynamics, commercial incentives, trademark effects, and
 lessons applicable to Commerce Architect.
 
-### Licensing and Stewardship Decisions
+#### Licensing and Stewardship Decisions
 
 - [x] Select `AGPL-3.0-only` for `backend/`.
 - [x] Select `Apache-2.0` for `frontend/`.
@@ -204,7 +212,8 @@ lessons applicable to Commerce Architect.
   `LICENSE.md`.
 - [ ] Add SPDX identifiers or other license metadata where useful.
 - [x] Add `backend/LICENSE`, `frontend/LICENSE`, and `LICENSE.md`.
-- [ ] Verify dependency and asset license compatibility.
+- [ ] **CAN FOLLOW AFTER PUBLIC:** Expand dependency and asset license
+  compatibility verification.
 - [x] Record the component license decisions and rationale.
 
 ## Repository Ownership and Organization Transfer
@@ -216,7 +225,7 @@ metadata.
 ### Before Transfer
 
 - [x] Confirm the current maintainer had the repository admin access required to
-  transfer `anthonylpeterson/commerce-architect`.
+  transfer the source repository.
 - [x] Confirm the `empowerment-forge` organization could receive the repository.
 - [x] Confirm the target repository name was available.
 - [ ] Confirm no conflicting fork network prevents transfer.
@@ -241,7 +250,8 @@ metadata.
 - [x] Confirm full Git history is intact.
 - [x] Confirm issues are intact.
 - [x] Confirm pull requests and review history are intact.
-- [ ] Confirm tags and releases are intact.
+- [x] Confirm the lightweight `v0.1.0` tag is intact and that no GitHub Release
+  currently exists.
 - [x] Confirm Actions still run.
 - [x] Confirm `develop` is synchronized with `origin/develop`.
 - [ ] Reconcile and verify `main` for publication.
@@ -252,7 +262,7 @@ metadata.
 - [x] Confirm the ChatGPT GitHub connector can access the private repository.
 - [x] Review organization ownership and repository administrator access.
 - [ ] Review branch settings and rulesets after transfer.
-- [ ] Find and update links that incorrectly use the previous repository owner.
+- [x] Find and update links that incorrectly use the previous repository owner.
 
 **COMPLETE:** The transfer has occurred successfully. Git history, issues,
 pull-request history, Actions, access, and the private repository state were
@@ -313,11 +323,14 @@ revalidated before publication.
 
 ### Secrets and History
 
-- No literal Gemini API key was found in current HEAD or reachable Git history.
-- Historical Gemini code read `GEMINI_API_KEY` from the environment only.
-- No high-confidence provider secret was found.
-- No Git-history rewrite is currently warranted.
-- A dedicated final secret scanner is still required before publication.
+- Gitleaks `v8.30.1` found no secrets in current files or reachable histories.
+- A focused metadata rewrite replaced the personal author/committer email with
+  `38113758+anthonylpeterson@users.noreply.github.com` across all persistent
+  refs; post-push local and GitHub checks found no remaining occurrence.
+- Commit trees, messages, names, timestamps, and topology were preserved, and
+  `git fsck --full` passed.
+- The current-file privacy review found no unsuitable personal information;
+  test email addresses use the reserved `example.com` domain.
 
 ### Development Configuration
 
@@ -381,13 +394,14 @@ enabled blindly.
 
 ### Public Documentation and Community Files
 
-- README needs a prominent maturity/status statement.
-- Documentation contains conflicting production-readiness language.
-- Public readers need a clearer distinction among current implementation,
-  frozen architecture, and aspirational design.
-- `LICENSE.md`, component license files, and `CONTRIBUTING.md` now exist.
-- `SECURITY.md` and a private vulnerability-reporting path remain
-  pre-publication priorities.
+- README includes a prominent early-stage maturity statement and concise
+  documentation map.
+- Contradictory production-readiness and stale architecture-tool language has
+  been removed from public entry points.
+- `LICENSE.md`, component license files, `CONTRIBUTING.md`, and `SECURITY.md`
+  exist and are linked from README.
+- `SECURITY.md` prohibits public vulnerability disclosure and provides a
+  private reporting path without inventing contact details.
 - `CODE_OF_CONDUCT.md`, issue templates, and a pull-request template are absent
   and may be completed before or soon after publication as appropriate.
 
@@ -395,8 +409,9 @@ enabled blindly.
 
 ### Phase 1 — Licensing and Stewardship
 
-**IN PROGRESS:** Component licensing is established. Compatibility review and
-contributor/legal decisions remain open.
+**COMPLETE FOR INITIAL PUBLICATION:** Component licensing and artifacts are
+established. The remaining study, CLA, and detailed policy work can follow
+after publication while external code contributions remain paused.
 
 - [x] Define and approve the initial component-specific licensing principles.
 - [ ] Complete the historical case studies.
@@ -413,9 +428,9 @@ contributor/legal decisions remain open.
 - [x] Add the required component license artifacts.
 - [ ] Verify dependency and asset license compatibility.
 
-Publication must not proceed before dependency and asset compatibility review
-and the remaining contributor/legal decisions are resolved or explicitly
-accepted.
+Expanded dependency/asset license inventory and contributor/legal decisions are
+tracked as post-public maturity work and do not authorize accepting external
+code before contributor terms are ready.
 
 ### Phase 2 — Repository Ownership
 
@@ -434,12 +449,12 @@ where they have not yet been fully verified.
 - [x] Verify `develop` is synchronized with `origin/develop`.
 - [ ] Reconcile and verify `main` for publication.
 - [ ] Review branch settings and rulesets after transfer.
-- [ ] Update owner-specific documentation and external links.
+- [x] Update owner-specific documentation and external links.
 
 ### Phase 3 — Security and Configuration Hygiene
 
-**IN PROGRESS:** Django configuration hardening is implemented; the remaining
-infrastructure and final production-deployment checks stay open.
+**COMPLETE FOR REPOSITORY PUBLICATION:** Django configuration hardening is
+implemented. Final production-platform checks remain deployment work.
 
 - [x] Move Django `SECRET_KEY` to environment-backed configuration.
 - [x] Separate safe development defaults from production requirements.
@@ -453,13 +468,16 @@ infrastructure and final production-deployment checks stay open.
 - [x] Re-run Django deployment security checks in development and production
   modes.
 - [x] Document remaining development-only warnings and production requirements.
-- [ ] Run the deployment check against the final production platform and domain.
-- [ ] Decide and enable HSTS only after HTTPS behavior is verified.
+- [ ] **CAN FOLLOW AFTER PUBLIC:** Run the deployment check against the final
+  production platform and domain.
+- [ ] **CAN FOLLOW AFTER PUBLIC:** Decide and enable HSTS only after HTTPS
+  behavior is verified.
 
 ### Phase 4 — Dependency Security
 
-**IN PROGRESS:** Current npm and Python scans have no known findings; Python
-determinism and repeatable auditing remain open.
+**COMPLETE FOR INITIAL PUBLICATION:** Current npm and Python scans have no known
+findings. Python determinism and repeatable auditing remain post-public
+hardening work.
 
 - [x] Assess every npm critical and high advisory.
 - [x] Upgrade affected frontend dependencies through reviewed changes.
@@ -470,8 +488,10 @@ determinism and repeatable auditing remain open.
 - [x] Run `npm audit` again; zero vulnerabilities remain.
 - [x] Establish a current Python vulnerability baseline with `pip-audit`; no
   known vulnerabilities were found.
-- [ ] Add a repeatable Python vulnerability audit to the maintained workflow.
-- [ ] Decide and implement a Python lock or constraints strategy.
+- [ ] **CAN FOLLOW AFTER PUBLIC:** Add a repeatable Python vulnerability audit
+  to the maintained workflow.
+- [ ] **CAN FOLLOW AFTER PUBLIC:** Decide and implement a Python lock or
+  constraints strategy.
 - [x] Add weekly Dependabot updates for npm, pip, and GitHub Actions.
 - [x] Confirm no critical/high npm or Python audit finding requires residual
   acceptance at this review.
@@ -482,24 +502,25 @@ determinism and repeatable auditing remain open.
 points.
 
 - [x] Add the selected component license artifacts and repository license map.
-- [ ] Add `SECURITY.md`.
-- [ ] Define a private vulnerability-reporting process.
-- [ ] State that vulnerabilities must not be filed as public issues.
+- [x] Add `SECURITY.md`.
+- [x] Define a private vulnerability-reporting process.
+- [x] State that vulnerabilities must not be filed as public issues.
 - [x] Add `CONTRIBUTING.md` with the temporary external-code contribution
   policy.
-- [ ] Add the selected CLA/contributor terms if required by the final model.
+- [ ] **CAN FOLLOW AFTER PUBLIC:** Add CLA/contributor terms before external
+  code contributions are accepted, if required by the final model.
 - [x] Document the intended branch, PR, review, and CI contributor workflow.
 - [x] Document current contributor licensing expectations without creating a
   CLA.
-- [ ] Add maintainer and contact guidance.
-- [ ] Add a prominent README maturity/status statement.
-- [ ] Remove defensive or stale public-facing wording.
-- [ ] Reconcile production-readiness contradictions.
-- [ ] Add a concise documentation map.
-- [ ] Clarify current, frozen, superseded, and aspirational documents.
+- [x] Add maintainer and contact guidance without inventing contact details.
+- [x] Add a prominent README maturity/status statement.
+- [x] Remove defensive or stale public-facing wording.
+- [x] Reconcile production-readiness contradictions.
+- [x] Add a concise documentation map.
+- [x] Clarify current, frozen, and aspirational documents.
 - [ ] Verify branding and logo publication rights.
 - [x] Link the license map and contribution guide from README.
-- [ ] Link the security policy from README after `SECURITY.md` exists.
+- [x] Link the security policy from README.
 
 ### Phase 6 — GitHub Public-Repository Configuration
 
@@ -517,7 +538,7 @@ points.
 - [ ] Enable secret scanning.
 - [ ] Enable push protection.
 - [ ] Enable Private Vulnerability Reporting.
-- [ ] Add Dependabot configuration.
+- [x] Add Dependabot configuration.
 - [ ] Improve the repository description.
 - [ ] Add repository topics.
 - [ ] Review current public-bound issues, PRs, and comments.
@@ -535,36 +556,46 @@ publication and enable or verify them immediately after visibility changes.
 - [x] Repository is owned by `empowerment-forge`.
 - [x] Component license artifacts exist and match the selected software
   licenses.
-- [ ] `SECURITY.md` exists.
+- [x] `SECURITY.md` exists.
 - [x] `CONTRIBUTING.md` exists with the temporary contribution policy.
-- [ ] No known critical/high dependency issue remains without explicit
+- [x] No known critical/high dependency issue remains without explicit
   acceptance.
-- [ ] Development secrets cannot masquerade as production secrets.
-- [ ] `.env.example` contains no real credentials.
-- [ ] Backend tests pass.
-- [ ] Frontend tests pass.
-- [ ] Frontend build passes.
-- [ ] Frontend lint passes.
+- [x] Development secrets cannot masquerade as production secrets.
+- [x] `.env.example` contains no real credentials.
+- [x] Backend tests pass.
+- [x] Frontend tests pass.
+- [x] Frontend build passes.
+- [x] Frontend lint passes.
 - [ ] Reconcile the current approved `develop` state into `main`.
 - [ ] Confirm the publication-candidate `main` README describes the current
-  platform and contains no stale Gemini or architecture-agent language.
+  platform and contains no superseded tooling language.
 - [ ] Final CI passes on the publication candidate.
-- [ ] Django deployment posture is understood and documented.
-- [ ] A dedicated secret scan passes.
-- [ ] Git history contains no credential requiring removal.
-- [ ] Personal/private information review is complete.
-- [ ] Maintainer publication of Git author metadata is intentional.
+- [x] Django deployment posture is understood and documented.
+- [x] A dedicated Gitleaks scan passes.
+- [x] Git history contains no credential requiring removal.
+- [x] Personal/private information review is complete.
+- [x] Git author/committer metadata uses the verified GitHub noreply address.
 - [ ] Branding and logo rights are confirmed.
-- [ ] README clearly states project maturity.
-- [ ] Documentation links work.
+- [x] README clearly states project maturity.
+- [x] Documentation links work.
 - [ ] Open issues are suitable for public visibility.
-- [ ] Branch strategy is documented.
-- [ ] GitHub organization permissions are reviewed.
+- [x] Branch strategy is documented.
+- [x] GitHub organization permissions are reviewed.
 - [ ] `main` and `develop` protection is configured or ready for immediate
   enablement.
-- [ ] A private vulnerability-reporting path is ready.
+- [x] A private vulnerability-reporting path is ready.
 - [ ] Repository description and topics are ready.
 - [ ] Maintainer explicitly approves publication.
+
+### Remaining Release Actions After This PR
+
+- [ ] Reconcile the approved `develop` state into `main`.
+- [ ] Verify final CI on `main`.
+- [ ] Configure or verify GitHub branch protections and security features.
+- [ ] Confirm the repository description and topics.
+- [ ] Complete an explicit go/no-go review, including branding/logo rights and
+  the public issue set.
+- [ ] Change repository visibility to public.
 
 Final action:
 
@@ -616,6 +647,11 @@ necessary for safe publication:
 - [ ] Add container vulnerability scanning.
 - [ ] Define formal governance when an actual maintainer community exists.
 - [ ] Publish a formal trademark policy when needed.
+- [ ] Finalize CLA and contributor-rights terms with appropriate legal review.
+- [ ] Define detailed trademark and branding policy.
+- [ ] Complete the Python lock/constraints and repeatable-audit strategy.
+- [ ] Verify HSTS against the real production domain before enabling it.
+- [ ] Decide future SDK, CLI, extension/plugin, and documentation licensing.
 
 These tasks should improve project maturity without creating unnecessary
 pre-publication bureaucracy.

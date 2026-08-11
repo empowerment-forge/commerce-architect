@@ -1,4 +1,4 @@
-# Review Architecture Agent
+# Architecture Review Checklist
 
 ## Objective
 Evaluate changes for architectural consistency, risk, and long-term maintainability, and provide actionable recommendations.

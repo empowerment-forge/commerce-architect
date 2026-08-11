@@ -46,5 +46,5 @@ Describe table:
 
 -   ACID compliance
 -   Strong relational integrity
--   Production-ready
+-   Widely deployed in production environments
 -   Docker compatible
