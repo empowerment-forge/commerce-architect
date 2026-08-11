@@ -110,6 +110,78 @@ React/Vite: http://localhost:5173/
 Django:     http://localhost:8000/
 ```
 
+The checked-in Compose file is explicitly development-only. It selects
+`COMMERCE_ENV=development` and passes a labeled non-secret Django key and fixed
+local PostgreSQL credentials. Production deployments must inject their own
+configuration and must not reuse these values.
+
+------------------------------------------------------------------------
+
+# Environment and Production Security
+
+`.env.example` contains safe local examples and may be copied to `.env` for
+local overrides. `.env` and secret-bearing variants are ignored by Git;
+`.env.example` remains tracked. Compose works without either file.
+
+Compose substitutions such as `${VARIABLE:-default}` use the environment value
+when it is set and non-empty; otherwise, Compose uses the displayed fallback.
+The checked-in fallback values are development-only and must not be reused in
+production.
+
+## Core Django Variables
+
+| Variable | Development | Production |
+| --- | --- | --- |
+| `COMMERCE_ENV` | `development` | Required: `production` |
+| `DJANGO_SECRET_KEY` | Labeled local-only value | Required strong secret; no fallback or automatic generation |
+| `DJANGO_DEBUG` | Defaults to `true` | Must be omitted/false; true is rejected |
+| `DJANGO_ALLOWED_HOSTS` | Localhost, loopback, and Compose/test hosts | Required comma-separated deployment hostnames |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | Empty for the same-origin Vite proxy | Comma-separated HTTPS origins when trusted cross-origin POSTs are required |
+| `DATABASE_HOST` | `db` through Compose | Required |
+| `DATABASE_NAME` | Derived from `POSTGRES_DB` | Required |
+| `DATABASE_USER` | Derived from `POSTGRES_USER` | Required |
+| `DATABASE_PASSWORD` | Fixed local-only value | Required; known development values are rejected |
+| `DATABASE_PORT` | `5432` | Optional; defaults to `5432` |
+
+Production fails startup if its Django secret is absent, shorter than 50
+characters, begins with `django-insecure-`, or contains `changeme`. It also
+fails if debug is enabled, deployment hosts are absent, only development hosts
+are supplied, database settings are missing, or a known development database
+password is reused.
+
+## HTTPS and Proxy Variables
+
+| Variable | Production behavior |
+| --- | --- |
+| `DJANGO_SECURE_SSL_REDIRECT` | Defaults to `true`; set false only when an explicitly reviewed upstream performs the redirect |
+| `DJANGO_TRUST_FORWARDED_PROTO` | Set true only behind a trusted proxy that overwrites `X-Forwarded-Proto` |
+| `DJANGO_SECURE_HSTS_SECONDS` | Defaults to `0` until the production domain and HTTPS behavior are verified |
+| `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS` | Defaults to `false`; enable only after all subdomains are HTTPS-ready |
+| `DJANGO_SECURE_HSTS_PRELOAD` | Defaults to `false`; preload is intentionally deferred |
+
+Production always sets Django session, CSRF, and refresh-token cookies to
+`Secure`. The refresh token remains `HttpOnly`, `SameSite=Strict`, and scoped to
+`/api/auth/`. Development uses a non-`Secure` refresh cookie so authentication
+can work over local HTTP; `HttpOnly`, `SameSite`, and path restrictions remain
+unchanged.
+
+The current Vite development server proxies `/api` to `http://web:8000`, so the
+browser makes same-origin requests and no CORS package or wildcard policy is
+needed. The initial production assumption is likewise same-origin browser/API
+routing through a trusted HTTPS proxy. A separate browser origin requires a
+deliberate CORS and CSRF review; `SameSite=None` is not a default.
+
+Run the ordinary and deployment-oriented Django checks with:
+
+```bash
+podman-compose exec -T web python manage.py check
+podman-compose exec -T web python manage.py check --deploy
+```
+
+Use `docker compose` in place of `podman-compose` for Docker. The deployment
+check must also run in the real production environment so it evaluates the
+production variables rather than the intentionally relaxed development values.
+
 ------------------------------------------------------------------------
 
 # Check Service Status
