@@ -209,6 +209,8 @@ development and the optional native Vite workflow.
 -   [Platform philosophy](docs/PLATFORM_PHILOSOPHY.md) — enduring project and
     adoption principles
 -   [Product roadmap](docs/ROADMAP.md) — current implementation and next steps
+-   [Build and deployment guide](docs/BUILD_DEPLOY.md) — intended Railway
+    deployment, security, recovery, and operational architecture
 -   [Public-readiness roadmap](docs/COMMERCE_ARCHITECT_PUBLIC_ROADMAP.md) —
     publication checklist and remaining release actions
 -   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and
