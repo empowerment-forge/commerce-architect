@@ -1,131 +1,415 @@
-# Docker Setup & Configuration
+# Container Setup & Configuration
 
 ## Purpose
 
-This document explains every step taken to containerize Django and
-PostgreSQL for local development in WSL2 using Docker Desktop.
+This document explains how to run the Commerce Architect PostgreSQL, Django, and
+React/Vite development services locally with either Podman Compose or Docker
+Compose. The checked-in `docker-compose.yml` is compatible with both workflows;
+use the container runtime that fits your development environment.
 
-This process MUST be followed exactly for repeatability.
-
-------------------------------------------------------------------------
-
-# Prerequisites
-
-1.  Install Docker Desktop (Windows).
-
-2.  Enable WSL2 integration inside Docker Desktop settings.
-
-3.  Verify Docker works inside WSL:
-
-    docker version
-
-4.  Test Docker runtime:
-
-    docker run hello-world
-
-If this works, Docker is properly integrated.
+GitHub Actions CI currently uses Docker Compose. Local Linux development can use
+Podman and Podman Compose without changing the Compose file.
 
 ------------------------------------------------------------------------
 
 # Architecture Overview
 
-Docker services:
+The Compose project defines three services:
 
--   web → Django application container
--   db → PostgreSQL 16 container
+-   `web` -- Django development server, published at local port `8000`
+-   `db` -- PostgreSQL 16, published at local port `5432`
+-   `frontend` -- React/Vite development server, published at local port `5173`
 
-Database persistence is handled via a Docker volume.
+The named volume `postgres_data` stores PostgreSQL data outside the lifecycle of
+an individual container. A normal stop and restart therefore preserves database
+data. The named volume `frontend_node_modules` keeps Linux frontend dependencies
+inside the container environment while `./frontend` is bind-mounted at `/app`
+for live source edits. At startup, `npm ci` synchronizes that dependency volume
+with the checked-in `frontend/package-lock.json`; host `node_modules` does not
+replace the container dependencies.
 
-------------------------------------------------------------------------
+The Django image is built from `./backend`, and that directory is bind-mounted
+at `/app` in the `web` container. The React/Vite image and bind mount continue to
+use `./frontend`. Compose orchestration remains in `docker-compose.yml` at the
+repository root.
 
-# First Build
+Compose creates an internal network for the services. Django connects to
+PostgreSQL with `DATABASE_HOST=db`, and Vite proxies `/api` requests to
+`http://web:8000`; `db` and `web` are Compose service names that resolve inside
+that network. Host access uses `http://localhost:8000/` for Django and
+`http://localhost:5173/` for React/Vite.
 
-Build and run:
+```text
+Host browser                         Compose network
 
-    docker compose up --build
+localhost:5173 -> React/Vite         frontend -> http://web:8000 -> Django
+localhost:8000 -> Django             Django   -> db             -> PostgreSQL
+```
 
-This will:
-
--   Build the Django image
--   Pull PostgreSQL image
--   Create Docker network
--   Start both containers
--   Stream logs
-
-Access:
-
-    http://localhost:8000/
-
-------------------------------------------------------------------------
-
-# Stop Containers
-
-    docker compose down
-
-Stops containers but preserves database volume.
-
-------------------------------------------------------------------------
-
-# Restart Web Container
-
-    docker compose restart web
-
-Use after configuration or dependency changes.
+`web:8000` is internal Compose service addressing. It does not conflict with
+`localhost:8000`, which is the published host port used by a browser or other
+host tool. When Vite runs in Compose, it accepts the browser's `/api` request on
+port 5173 and forwards that request to Django at `web:8000`.
 
 ------------------------------------------------------------------------
 
-# Migration Workflow (Critical)
+# Choose a Local Runtime
 
-Step 1 -- Generate Migration Files:
+## Linux / Pop!_OS / Podman
 
-    docker compose exec web python manage.py makemigrations
+Install Podman and Podman Compose using the package-management approach for your
+Linux distribution. Verify both commands are available:
 
-This scans models.py and creates migration instructions.
+```bash
+podman --version
+podman-compose --version
+```
 
-Step 2 -- Apply Migrations:
+The Compose file uses OCI-compatible images and works with Podman Compose.
 
-    docker compose exec web python manage.py migrate
+## Windows / WSL2 / Docker Desktop
 
-This applies schema changes to PostgreSQL.
+Install Docker Desktop, enable WSL2 integration for the distribution containing
+the repository, and verify Docker from the WSL shell:
+
+```bash
+docker version
+docker compose version
+```
+
+Both local approaches run the same `db`, `web`, and `frontend` service
+definitions.
 
 ------------------------------------------------------------------------
 
-# Create Admin User
+# First Build and Start
 
-    docker compose exec web python manage.py createsuperuser
+Run Compose commands from the repository root.
 
-This creates a record in auth_user table.
+With Podman Compose:
 
-Access admin panel:
+```bash
+podman-compose up --build -d
+```
 
-    http://localhost:8000/admin/
+With Docker Compose:
+
+```bash
+docker compose up --build -d
+```
+
+`up` creates and starts the services. `--build` builds the Django and frontend
+development images, and `-d` leaves all three services running in the
+background. The command also pulls PostgreSQL 16 when needed, creates the
+internal network, and creates or reuses the named volumes.
+
+Open the applications at:
+
+```text
+React/Vite: http://localhost:5173/
+Django:     http://localhost:8000/
+```
+
+The checked-in Compose file is explicitly development-only. It selects
+`COMMERCE_ENV=development` and passes a labeled non-secret Django key and fixed
+local PostgreSQL credentials. Production deployments must inject their own
+configuration and must not reuse these values.
+
+------------------------------------------------------------------------
+
+# Environment and Production Security
+
+`.env.example` contains safe local examples and may be copied to `.env` for
+local overrides. `.env` and secret-bearing variants are ignored by Git;
+`.env.example` remains tracked. Compose works without either file.
+
+Compose substitutions such as `${VARIABLE:-default}` use the environment value
+when it is set and non-empty; otherwise, Compose uses the displayed fallback.
+The checked-in fallback values are development-only and must not be reused in
+production.
+
+## Core Django Variables
+
+| Variable | Development | Production |
+| --- | --- | --- |
+| `COMMERCE_ENV` | `development` | Required: `production` |
+| `DJANGO_SECRET_KEY` | Labeled local-only value | Required strong secret; no fallback or automatic generation |
+| `DJANGO_DEBUG` | Defaults to `true` | Must be omitted/false; true is rejected |
+| `DJANGO_ALLOWED_HOSTS` | Localhost, loopback, and Compose/test hosts | Required comma-separated deployment hostnames |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | Empty for the same-origin Vite proxy | Comma-separated HTTPS origins when trusted cross-origin POSTs are required |
+| `DATABASE_HOST` | `db` through Compose | Required |
+| `DATABASE_NAME` | Derived from `POSTGRES_DB` | Required |
+| `DATABASE_USER` | Derived from `POSTGRES_USER` | Required |
+| `DATABASE_PASSWORD` | Fixed local-only value | Required; known development values are rejected |
+| `DATABASE_PORT` | `5432` | Optional; defaults to `5432` |
+
+Production fails startup if its Django secret is absent, shorter than 50
+characters, begins with `django-insecure-`, or contains `changeme`. It also
+fails if debug is enabled, deployment hosts are absent, only development hosts
+are supplied, database settings are missing, or a known development database
+password is reused.
+
+## HTTPS and Proxy Variables
+
+| Variable | Production behavior |
+| --- | --- |
+| `DJANGO_SECURE_SSL_REDIRECT` | Defaults to `true`; set false only when an explicitly reviewed upstream performs the redirect |
+| `DJANGO_TRUST_FORWARDED_PROTO` | Set true only behind a trusted proxy that overwrites `X-Forwarded-Proto` |
+| `DJANGO_SECURE_HSTS_SECONDS` | Defaults to `0` until the production domain and HTTPS behavior are verified |
+| `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS` | Defaults to `false`; enable only after all subdomains are HTTPS-ready |
+| `DJANGO_SECURE_HSTS_PRELOAD` | Defaults to `false`; preload is intentionally deferred |
+
+Production always sets Django session, CSRF, and refresh-token cookies to
+`Secure`. The refresh token remains `HttpOnly`, `SameSite=Strict`, and scoped to
+`/api/auth/`. Development uses a non-`Secure` refresh cookie so authentication
+can work over local HTTP; `HttpOnly`, `SameSite`, and path restrictions remain
+unchanged.
+
+The current Vite development server proxies `/api` to `http://web:8000`, so the
+browser makes same-origin requests and no CORS package or wildcard policy is
+needed. The initial production assumption is likewise same-origin browser/API
+routing through a trusted HTTPS proxy. A separate browser origin requires a
+deliberate CORS and CSRF review; `SameSite=None` is not a default.
+
+Run the ordinary and deployment-oriented Django checks with:
+
+```bash
+podman-compose exec -T web python manage.py check
+podman-compose exec -T web python manage.py check --deploy
+```
+
+Use `docker compose` in place of `podman-compose` for Docker. The deployment
+check must also run in the real production environment so it evaluates the
+production variables rather than the intentionally relaxed development values.
+
+------------------------------------------------------------------------
+
+# Check Service Status
+
+With Podman Compose:
+
+```bash
+podman-compose ps
+```
+
+With Docker Compose:
+
+```bash
+docker compose ps
+```
+
+Expect `db`, `web`, and `frontend` to be running. If `db` is unavailable, Django
+cannot connect to PostgreSQL. If `web` is unavailable, the backend and proxied
+frontend API requests cannot reach port 8000. If `frontend` is unavailable, the
+Vite development UI cannot be reached on port 5173.
+
+The developer command quick reference below includes commands for all logs and
+individual service logs.
+
+------------------------------------------------------------------------
+
+# Developer Command Quick Reference
+
+Run these commands from the repository root. Use the command column for the
+runtime selected during onboarding.
+
+| Operation | Podman Compose | Docker Compose |
+| --- | --- | --- |
+| Build and start the complete stack | `podman-compose up --build -d` | `docker compose up --build -d` |
+| Start existing containers | `podman-compose start` | `docker compose start` |
+| Stop containers without removing them | `podman-compose stop` | `docker compose stop` |
+| Stop and remove containers and the network | `podman-compose down` | `docker compose down` |
+| Show service status | `podman-compose ps` | `docker compose ps` |
+| Follow all logs | `podman-compose logs -f` | `docker compose logs -f` |
+| Follow Django logs | `podman-compose logs -f web` | `docker compose logs -f web` |
+| Follow frontend logs | `podman-compose logs -f frontend` | `docker compose logs -f frontend` |
+| Run backend tests | `podman-compose exec -T web pytest` | `docker compose exec -T web pytest` |
+| Run frontend tests | `podman-compose exec -T frontend npm run test -- --run` | `docker compose exec -T frontend npm run test -- --run` |
+| Build the frontend | `podman-compose exec -T frontend npm run build` | `docker compose exec -T frontend npm run build` |
+| Lint the frontend | `podman-compose exec -T frontend npm run lint` | `docker compose exec -T frontend npm run lint` |
+| Apply Django migrations | `podman-compose exec web python manage.py migrate` | `docker compose exec web python manage.py migrate` |
+| Open the Django shell | `podman-compose exec web python manage.py shell` | `docker compose exec web python manage.py shell` |
+| Synchronize changed frontend dependencies | `podman-compose restart frontend` | `docker compose restart frontend` |
+
+After `backend/Dockerfile`, a Compose service, or another image-build change,
+rebuild and
+recreate the stack with `podman-compose down` followed by
+`podman-compose up --build -d`, or the equivalent Docker Compose commands. A
+normal source-code edit does not require a rebuild because the backend and
+frontend source directories are bind-mounted. A frontend lockfile change
+requires only a frontend restart; startup `npm ci` synchronizes the dependency
+volume.
+
+------------------------------------------------------------------------
+
+# Migration Workflow
+
+Apply checked-in migrations after the first start and whenever new migrations
+are added.
+
+With Podman Compose:
+
+```bash
+podman-compose exec web python manage.py migrate
+```
+
+With Docker Compose:
+
+```bash
+docker compose exec web python manage.py migrate
+```
+
+When intentionally changing Django models, generate migration files with the
+corresponding runtime command:
+
+```bash
+podman-compose exec web python manage.py makemigrations
+```
+
+or:
+
+```bash
+docker compose exec web python manage.py makemigrations
+```
+
+`makemigrations` creates migration instructions from model changes; `migrate`
+applies checked-in migration instructions to PostgreSQL.
+
+------------------------------------------------------------------------
+
+# Create an Admin User
+
+With Podman Compose:
+
+```bash
+podman-compose exec web python manage.py createsuperuser
+```
+
+With Docker Compose:
+
+```bash
+docker compose exec web python manage.py createsuperuser
+```
+
+Follow the interactive prompts, then open:
+
+```text
+http://localhost:8000/admin/
+```
 
 ------------------------------------------------------------------------
 
 # Access PostgreSQL
 
-    docker compose exec db psql -U commerce -d commerce_db
+With Podman Compose:
 
-Useful commands:
+```bash
+podman-compose exec db psql -U commerce -d commerce_db
+```
 
-    \dt
-    \d tablename
-    \q
+With Docker Compose:
+
+```bash
+docker compose exec db psql -U commerce -d commerce_db
+```
+
+Useful `psql` commands include:
+
+```text
+\dt
+\d tablename
+\q
+```
+
+`\dt` lists tables, `\d tablename` describes a table, and `\q` exits the shell.
 
 ------------------------------------------------------------------------
 
-# Full Reset (Destructive)
+# Stop and Remove Containers
 
-WARNING: Deletes all data.
+`stop` stops the project containers but keeps them available for a later
+`start`. It does not remove containers, the Compose network, or named volumes:
 
-    docker compose down -v
-    docker compose up --build
+```bash
+podman-compose stop
+```
+
+or:
+
+```bash
+docker compose stop
+```
+
+`down` stops and removes the project containers and Compose network. It preserves
+named volumes when `-v` is omitted:
+
+With Podman Compose:
+
+```bash
+podman-compose down
+```
+
+With Docker Compose:
+
+```bash
+docker compose down
+```
+
+Normal shutdown should use `stop` or `down` without `-v`. Both preserve the
+PostgreSQL data volume and frontend dependency volume.
+
+------------------------------------------------------------------------
+
+# Full Volume Reset (Destructive)
+
+**Warning:** `down -v` stops and removes the containers and network **and deletes
+the project's named volumes**. This destroys the PostgreSQL development data in
+`postgres_data` as well as the replaceable frontend dependency volume. It is not
+a normal shutdown command. Use it only when a complete local data reset is
+intentional.
+
+With Podman Compose:
+
+```bash
+podman-compose down -v
+podman-compose up --build -d
+```
+
+With Docker Compose:
+
+```bash
+docker compose down -v
+docker compose up --build -d
+```
+
+After resetting the volume, apply migrations again before using the application.
 
 ------------------------------------------------------------------------
 
 # Development Notes
 
--   Django runs on 0.0.0.0:8000
--   Database host inside Docker is "db"
--   Containers communicate via internal Docker network
--   Rebuild only when Dockerfile or requirements.txt changes
+-   Django listens on `0.0.0.0:8000` in the `web` container.
+-   Vite listens on `0.0.0.0:5173` in the `frontend` container. The frontend
+    source bind mount lets Vite observe host edits and provide hot module
+    replacement without rebuilding the image.
+-   Inside Compose, `VITE_API_PROXY_TARGET=http://web:8000` directs Vite's
+    `/api` proxy to Django over the Compose network. Native host Vite development
+    still defaults to `http://localhost:8000` when that variable is unset.
+-   PostgreSQL listens on port `5432` and persists data in `postgres_data`.
+-   `DATABASE_HOST=db` is correct inside the Compose network; it should not be
+    replaced with `localhost` in the container configuration.
+-   Rebuild the Django image when `backend/Dockerfile` or Python dependency
+    inputs in `backend/` change.
+-   Rebuild the frontend image when `frontend/Dockerfile.dev` changes. Frontend
+    dependency changes are synchronized from `frontend/package-lock.json` by
+    `npm ci` at container startup. Restarting `frontend` is sufficient after a
+    lockfile change; deleting `frontend_node_modules` is not normally necessary.
+-   This container runs the Vite development server only. A future production
+    deployment may build the React application and publish its static assets to
+    dedicated frontend or static hosting instead. Likewise, local containerized
+    PostgreSQL does not require production to use a PostgreSQL container; a
+    managed PostgreSQL service remains a valid future choice. Production hosting
+    is intentionally undecided.
+-   GitHub Actions runs frontend tests with its Node 24 setup, then builds and
+    starts only `web` and `db` for backend tests. It does not duplicate frontend
+    dependency installation or tests in the Compose frontend service.

@@ -1,13 +1,35 @@
-# secrets
+# secrets and local environment overrides
 .env
+.env.*
+!.env.example
+
+# python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # node
 node_modules/
 
-# agent outputs
-outputs/*.json
-
 # logs
 *.log
 
+# editor and OS metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
 tree.txt
+tmp/
+PR/
+db.sqlite3

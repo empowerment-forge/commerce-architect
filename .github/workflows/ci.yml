@@ -15,16 +15,40 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm run test -- --run
 
       - name: Set up Docker
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build containers
-        run: docker compose build
+        run: docker compose build web
 
       - name: Start services
-        run: docker compose up -d
+        run: docker compose up -d db web
+
+      - name: Wait for PostgreSQL
+        run: |
+          for attempt in {1..30}; do
+            if docker compose exec -T db pg_isready -U commerce -d commerce_db; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "PostgreSQL did not become ready within 60 seconds."
+          exit 1
 
       - name: Run pytest
         run: docker compose exec -T web pytest

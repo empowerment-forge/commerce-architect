@@ -10,15 +10,18 @@ Django 6.x
 
 Created using:
 
+    cd backend
     django-admin startproject config .
 
-(See config/settings.py)
+(See `backend/config/settings.py`.)
 
 Structure:
 
--   config/ → project settings
--   catalog/ → domain app
--   manage.py
+-   `backend/config/` → project settings
+-   `backend/accounts/` → account and authentication app
+-   `backend/catalog/` → catalog domain app
+-   `backend/health/` → health endpoint
+-   `backend/manage.py` → Django command entry point
 
 ------------------------------------------------------------------------
 

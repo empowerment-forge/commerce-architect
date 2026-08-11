@@ -1,19 +1,31 @@
 # Commerce Architect
 
-Design-time agent system for generating secure, minimalist ecommerce
-architectures.
+Commerce Architect is an ecommerce platform codebase built with PostgreSQL,
+Django REST Framework, and React/Vite.
+
+> **Project maturity:** Commerce Architect is an early-stage project under
+> active development. The implemented catalog and authentication foundations
+> are tested, but the platform is not yet a production release and does not yet
+> provide a complete commerce experience or stable compatibility guarantees.
+
+The application source is divided into two explicit component directories:
+
+-   `backend/` contains the Django / DRF / Python application.
+-   `frontend/` contains the React / Vite / TypeScript application.
+
+Repository-level orchestration, CI configuration, and documentation remain at
+the repository root.
 
 ------------------------------------------------------------------------
 
 ## Current Status
 
--   Architecture Agent v1: Stable
--   Gemini integration: Working
--   Normalization + schema enforcement: Enabled
 -   Django + DRF backend operational
--   PostgreSQL running in Docker
--   CI (GitHub Actions) passing
--   Pytest test suite active
+-   PostgreSQL 16 running in a containerized local environment
+-   React/Vite frontend with a product-list UI
+-   Podman-compatible local development through the shared Compose file
+-   Docker Compose-based CI in GitHub Actions
+-   Pytest backend tests and Vitest frontend tests
 
 ------------------------------------------------------------------------
 
@@ -30,7 +42,7 @@ Commerce Architect is built with the following principles:
 3.  **Reversibility**
     -   Every decision must be changeable without rewrite.
 4.  **Owner-Controlled**
-    -   Docker-based.
+    -   OCI-container-based and Docker/Podman-compatible.
     -   PostgreSQL-backed.
     -   Cloud-agnostic.
 5.  **Commercial Grade**
@@ -39,22 +51,26 @@ Commerce Architect is built with the following principles:
     -   Clean branching discipline.
     -   Deterministic environments.
 
+Commerce Architect is intended to become an understandable, owner-controlled,
+and adoptable commerce architecture that developers and organizations can
+deploy, customize, and extend. The enduring principles and explicitly labeled
+target experience are described in
+[PLATFORM_PHILOSOPHY.md](docs/PLATFORM_PHILOSOPHY.md).
+
 ------------------------------------------------------------------------
 
 # Testing Strategy
 
-This project uses **pytest + pytest-django** as the primary test
-framework.
-
-We standardized on pytest early to avoid migrating test frameworks
-later.
+The backend uses **pytest + pytest-django**. The React frontend uses **Vitest +
+React Testing Library**.
 
 ## What We Test
 
 -   Health endpoint (`/health/`)
 -   Domain models (e.g., Product model)
 -   API endpoints (`/api/products/`)
--   Database integration (real Postgres via Docker)
+-   Database integration (real PostgreSQL through the containerized environment)
+-   React component and API-client behavior
 -   Type correctness (e.g., Decimal enforcement)
 
 ## What We Do NOT Test
@@ -73,23 +89,26 @@ Admin is treated as a management surface, not core business logic.
 3.  API responses must match schema expectations.
 4.  CI must pass before code is merged.
 
-If CI fails, the branch is not production-ready.
+Changes are not ready to merge until CI passes.
 
 ------------------------------------------------------------------------
 
 # CI Pipeline (GitHub Actions)
 
-CI runs inside Docker using the same `docker-compose.yml` used locally.
+GitHub Actions CI uses Docker Compose with the same `docker-compose.yml` that is
+compatible with local Docker Compose and Podman Compose workflows.
 
 The workflow:
 
-1.  Build containers
-2.  Start services
-3.  Run pytest inside the web container
-4.  Tear down services
+1.  Install locked frontend dependencies with Node.js 24
+2.  Run the Vitest frontend suite
+3.  Build and start the `db` and `web` Docker Compose services for backend
+    integration testing
+4.  Run pytest inside the `web` container
+5.  Tear down the services
 
-This ensures parity between: - Local development - CI - Production-style
-container runtime
+This checks both frontend and backend behavior while retaining an
+OCI-container-based, portable local architecture.
 
 ------------------------------------------------------------------------
 
@@ -100,9 +119,8 @@ We follow a simplified GitFlow-inspired model.
 ## Branch Types
 
 -   `main`
-    -   Production-ready
-    -   Stable
-    -   Tagged releases only
+    -   Publication and release branch
+    -   Receives reviewed changes from `develop`
 -   `develop`
     -   Integration branch
     -   All features merge here first
@@ -129,55 +147,86 @@ Even as a solo developer:
 -   All changes go through PR review (even if self-reviewed).
 -   CI must pass before merge.
 
-This discipline: - Prevents regression. - Makes scaling to multiple
-contributors trivial. - Keeps production stable.
+This discipline prevents regressions and keeps integration reviewable as the
+project grows.
 
 ------------------------------------------------------------------------
 
 # Current Architecture Stack
 
-Backend: - Django 6.x - Django REST Framework - PostgreSQL 16 - Docker
+Backend: - Django 6.x - Django REST Framework - PostgreSQL 16
 
-Testing: - pytest - pytest-django
+Frontend: - React - TypeScript - Vite - Tailwind CSS
 
-CI: - GitHub Actions - Docker-based pipeline
+Local containers: - Docker Compose - Podman Compose-compatible
+
+Testing: - pytest - pytest-django - Vitest - React Testing Library
+
+CI: - GitHub Actions - Docker Compose-based pipeline
 
 Future: - Stripe integration - Orders domain - Scheduling domain
 
+## Project Policies
+
+Commerce Architect uses component-specific software licenses. See
+[`LICENSE.md`](LICENSE.md) for the licensing map and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the current contribution policy.
+Report vulnerabilities privately according to [`SECURITY.md`](SECURITY.md).
+
+## Local Development
+
+The preferred local development workflow uses the shared Compose configuration
+to run the complete stack:
+
+-   PostgreSQL (`db`)
+-   Django / DRF (`web`)
+-   React / Vite (`frontend`)
+
+The checked-in Compose file is explicitly a development configuration. It
+supplies labeled local-only Django and PostgreSQL values so
+`podman-compose up --build -d` and `docker compose up --build -d` remain
+convenient. Production uses `COMMERCE_ENV=production` and fails startup when its
+required secret, host, or database configuration is absent or unsafe. See
+[DOCKER_SETUP.md](docs/DOCKER_SETUP.md) for the environment-variable and Django
+deployment-check reference. [`.env.example`](.env.example) contains safe local
+examples only.
+
+Start with [DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md) after cloning
+the repository. [DOCKER_SETUP.md](docs/DOCKER_SETUP.md) is the detailed Compose
+operations reference, and [UI_SETUP.md](docs/UI_SETUP.md) covers frontend-specific
+development and the optional native Vite workflow.
+
 ------------------------------------------------------------------------
 
-# Documentation
+# Documentation Map
 
-Detailed documentation is located in `/docs`:
-
--   [ARCHITECTURE_v1.2.md](docs/ARCHITECTURE_v1.2.md)
--   [DOCKER_SETUP.md](docs/DOCKER_SETUP.md)
--   [POSTGRES_SETUP.md](docs/POSTGRES_SETUP.md)
--   [DJANGO_ARCHITECTURE.md](docs/DJANGO_ARCHITECTURE.md)
--   [DRF_API.md](docs/DRF_API.md)
--   [CATALOG_DOMAIN.md](docs/CATALOG_DOMAIN.md)
--   [STYLE_SETUP.md](docs/STYLE_SETUP.md)
--   [DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md)
-
-------------------------------------------------------------------------
-
-# Usage
-
-``` bash
-npm run architecture inputs/example_retail.json
-```
+-   [Developer onboarding](docs/DEVELOPER_ONBOARDING.md) — first-time setup and
+    daily workflow
+-   [Docker and Podman setup](docs/DOCKER_SETUP.md) — local services,
+    configuration, and checks
+-   [Architecture record](docs/ARCHITECTURE_v1.2.md) — frozen Phase 1 design
+    context
+-   [Platform philosophy](docs/PLATFORM_PHILOSOPHY.md) — enduring project and
+    adoption principles
+-   [Product roadmap](docs/ROADMAP.md) — current implementation and next steps
+-   [Public-readiness roadmap](docs/COMMERCE_ARCHITECT_PUBLIC_ROADMAP.md) —
+    publication checklist and remaining release actions
+-   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and
+    [security policy](SECURITY.md) — repository policies
 
 ------------------------------------------------------------------------
 
-# Production Intent
+# Project Direction
 
-This repository is not a toy.
-
-It is designed to become:
+Commerce Architect is intended to become:
 
 -   A commercial-grade ecommerce platform
--   A reusable architecture template
--   A client-deployable framework
+-   A reusable and understandable commerce architecture
+-   A framework that adopters can deploy and operate for their own businesses or
+    clients
+-   A platform with intentional developer and operator experiences
+-   An owner-controlled foundation for customization and extension
 -   A scalable multi-domain system
 
-Every decision going forward should preserve that intent.
+These are project goals rather than claims about the current early-stage
+implementation.

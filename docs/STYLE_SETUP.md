@@ -1,4 +1,5 @@
 ## STYLES for Empowerment Forge Commerce Platform Branding
+TODO: This needs work.
 
 # Primary Forge Orange
 
