@@ -3,6 +3,11 @@
 Commerce Architect is an ecommerce platform codebase built with PostgreSQL,
 Django REST Framework, and React/Vite.
 
+> **Project maturity:** Commerce Architect is an early-stage project under
+> active development. The implemented catalog and authentication foundations
+> are tested, but the platform is not yet a production release and does not yet
+> provide a complete commerce experience or stable compatibility guarantees.
+
 The application source is divided into two explicit component directories:
 
 -   `backend/` contains the Django / DRF / Python application.
@@ -84,7 +89,7 @@ Admin is treated as a management surface, not core business logic.
 3.  API responses must match schema expectations.
 4.  CI must pass before code is merged.
 
-If CI fails, the branch is not production-ready.
+Changes are not ready to merge until CI passes.
 
 ------------------------------------------------------------------------
 
@@ -114,9 +119,8 @@ We follow a simplified GitFlow-inspired model.
 ## Branch Types
 
 -   `main`
-    -   Production-ready
-    -   Stable
-    -   Tagged releases only
+    -   Publication and release branch
+    -   Receives reviewed changes from `develop`
 -   `develop`
     -   Integration branch
     -   All features merge here first
@@ -143,8 +147,8 @@ Even as a solo developer:
 -   All changes go through PR review (even if self-reviewed).
 -   CI must pass before merge.
 
-This discipline: - Prevents regression. - Makes scaling to multiple
-contributors trivial. - Keeps production stable.
+This discipline prevents regressions and keeps integration reviewable as the
+project grows.
 
 ------------------------------------------------------------------------
 
@@ -162,11 +166,12 @@ CI: - GitHub Actions - Docker Compose-based pipeline
 
 Future: - Stripe integration - Orders domain - Scheduling domain
 
-## Licensing and Contributions
+## Project Policies
 
 Commerce Architect uses component-specific software licenses. See
 [`LICENSE.md`](LICENSE.md) for the licensing map and
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for the current contribution policy.
+Report vulnerabilities privately according to [`SECURITY.md`](SECURITY.md).
 
 ## Local Development
 
@@ -193,50 +198,27 @@ development and the optional native Vite workflow.
 
 ------------------------------------------------------------------------
 
-# Documentation
+# Documentation Map
 
-Detailed documentation is located in `/docs`:
-
--   [ARCHITECTURE_v1.2.md](docs/ARCHITECTURE_v1.2.md)
--   [PLATFORM_PHILOSOPHY.md](docs/PLATFORM_PHILOSOPHY.md)
--   [ROADMAP.md](docs/ROADMAP.md)
--   [DOCKER_SETUP.md](docs/DOCKER_SETUP.md)
--   [UI_SETUP.md](docs/UI_SETUP.md)
--   [POSTGRES_SETUP.md](docs/POSTGRES_SETUP.md)
--   [DJANGO_ARCHITECTURE.md](docs/DJANGO_ARCHITECTURE.md)
--   [DRF_API.md](docs/DRF_API.md)
--   [CATALOG_DOMAIN.md](docs/CATALOG_DOMAIN.md)
--   [DEVOPS.md](docs/DEVOPS.md)
--   [STYLE_SETUP.md](docs/STYLE_SETUP.md)
--   [DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md)
--   [TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md)
--   [USERAUTH_ARCHITECTURE.md](docs/USERAUTH_ARCHITECTURE.md)
--   [UX_ARCHITECTURE.md](docs/UX_ARCHITECTURE.md)
--   [PRODUCTLIST_UX_v1_0.md](docs/PRODUCTLIST_UX_v1_0.md)
--   [LOGIN_ARCHITECTURE.md](docs/LOGIN_ARCHITECTURE.md)
-
-## Project Roadmap
-
-[docs/ROADMAP.md](docs/ROADMAP.md) is the living view of the platform's current
-implementation state and major next steps. Architecture documentation describes
-the intended system design and constraints, while GitHub issues contain detailed
-implementation work and acceptance criteria. The roadmap connects those levels
-and evolves as major implementation slices are completed or priorities
-materially change.
-
-# Architecture Tool History
-
-The original architecture-generation tool was extracted into the separate
-[commerce-architecture-agent](https://github.com/anthonylpeterson/commerce-architecture-agent)
-repository. Commerce Architect does not depend on that tool.
+-   [Developer onboarding](docs/DEVELOPER_ONBOARDING.md) — first-time setup and
+    daily workflow
+-   [Docker and Podman setup](docs/DOCKER_SETUP.md) — local services,
+    configuration, and checks
+-   [Architecture record](docs/ARCHITECTURE_v1.2.md) — frozen Phase 1 design
+    context
+-   [Platform philosophy](docs/PLATFORM_PHILOSOPHY.md) — enduring project and
+    adoption principles
+-   [Product roadmap](docs/ROADMAP.md) — current implementation and next steps
+-   [Public-readiness roadmap](docs/COMMERCE_ARCHITECT_PUBLIC_ROADMAP.md) —
+    publication checklist and remaining release actions
+-   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and
+    [security policy](SECURITY.md) — repository policies
 
 ------------------------------------------------------------------------
 
-# Production Intent
+# Project Direction
 
-This repository is not a toy.
-
-It is designed to become:
+Commerce Architect is intended to become:
 
 -   A commercial-grade ecommerce platform
 -   A reusable and understandable commerce architecture
@@ -246,5 +228,5 @@ It is designed to become:
 -   An owner-controlled foundation for customization and extension
 -   A scalable multi-domain system
 
-These are production goals, not a claim that the repository is production-ready
-today. Every decision going forward should preserve that intent.
+These are project goals rather than claims about the current early-stage
+implementation.

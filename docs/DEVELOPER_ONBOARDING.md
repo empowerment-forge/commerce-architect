@@ -16,7 +16,7 @@ PostgreSQL.
 1.  Clone the repository and enter its root directory:
 
     ```bash
-    git clone https://github.com/anthonylpeterson/commerce-architect.git
+    git clone https://github.com/empowerment-forge/commerce-architect.git
     cd commerce-architect
     ```
 

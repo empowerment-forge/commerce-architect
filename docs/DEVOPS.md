@@ -2,9 +2,9 @@
 
 ## Overview
 
-This project follows a simplified GitFlow model to ensure:
+This project follows a simplified GitFlow model to support:
 
-- Stable production state
+- Controlled release preparation
 - Controlled integration
 - Enforced test discipline
 - Clean commit history
@@ -15,9 +15,9 @@ This project follows a simplified GitFlow model to ensure:
 # Branch Model
 
 ## main
-- Production-ready code
-- Always stable
-- Protected branch
+- Publication and release branch
+- Receives reviewed changes from develop
+- Intended to be protected before public release
 - No direct commits allowed
 
 ## develop
@@ -41,4 +41,3 @@ This project follows a simplified GitFlow model to ensure:
 git checkout develop
 git pull origin develop
 git checkout -b feature/<feature-name>
-
