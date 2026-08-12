@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Build frontend image once
         run: docker build --tag "${FRONTEND_IMAGE}:${GITHUB_SHA}" frontend
@@ -120,7 +120,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Build backend image once
         run: docker build --tag "${BACKEND_IMAGE}:${GITHUB_SHA}" backend
