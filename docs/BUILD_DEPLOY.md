@@ -38,9 +38,20 @@ production-style **non-production** Railway environment. It must be HTTPS-only,
 contain no real customer data or production credentials, and use real security,
 secrets, database, backup, testing, deployment, and operational controls.
 
-The Django environment should use its production behavior (`COMMERCE_ENV=production`)
-even though the data and business purpose are non-production. Environment names
-must not weaken runtime security expectations.
+The Django runtime must use its production security behavior even though the
+Railway environment is named `development` and its data and business purpose
+are non-production:
+
+```text
+COMMERCE_ENV=production
+DJANGO_DEBUG=false
+```
+
+The Railway environment name and Django security mode are separate concepts.
+This intentional configuration requires a strong `DJANGO_SECRET_KEY`, disables
+debug behavior, requires real `DJANGO_ALLOWED_HOSTS`, enables secure cookie
+behavior, and supports running Django deployment security checks. Environment
+names must not weaken runtime security expectations.
 
 ### Future Public Demo / Production
 
@@ -61,11 +72,11 @@ credentials, secrets, databases, backups, and access controls from hosted dev.
   tokens a 7-day lifetime.
 - **CURRENT — database:** PostgreSQL 16 in local Compose; Django migrations
   define schema evolution.
-- **CURRENT — containers:** a backend Dockerfile and development Compose setup;
-  the frontend has only `Dockerfile.dev`.
-- **CURRENT — CI:** GitHub Actions installs locked frontend dependencies, runs
-  frontend tests, builds/starts the Compose database and backend, and runs
-  backend pytest tests.
+- **CURRENT — containers:** a production backend image and development Compose
+  setup; the frontend has only `Dockerfile.dev`.
+- **CURRENT — CI:** GitHub Actions runs frontend tests and builds the production
+  backend image once, validates and scans that image against disposable
+  PostgreSQL, then publishes/deploys it only for successful `develop` pushes.
 
 ## Deployable Artifacts
 
@@ -85,21 +96,20 @@ the frontend-to-API base URL. No production frontend container exists today.
 
 ### Backend
 
-**CURRENT:** The Django application source, `backend/requirements.txt`, and
-backend Dockerfile form a development container image. The image installs
-Python dependencies, but Compose starts it with Django `runserver` and bind
-mounts source. Django exposes WSGI and ASGI entry points, but no production
-server package or start command is selected.
+**CURRENT:** `backend/Dockerfile` produces the hosted backend OCI image. It
+installs the reviewed Python requirements, copies the Django application, drops
+to the unprivileged `commerce` user, and starts the existing WSGI application
+with Gunicorn. `backend/gunicorn.conf.py` binds to Railway's injected `PORT`
+(default `8000`), emits access/error logs to standard streams, and supplies
+conservative initial worker and timeout defaults. Secrets and environment
+configuration are injected at runtime and are not image layers.
 
-**PLANNED:** Build an immutable OCI image containing reviewed Django source and
-deterministically installed Python dependencies. Run it with a supported
-production WSGI or ASGI application server, an explicit start command, safe
-process/time-out settings, and a health check. Django `runserver` is not
-acceptable for hosted operation.
+Local Compose intentionally continues to override the image command with
+Django `runserver` for local development only. Hosted Railway deployments use
+the image `CMD`; they never use `runserver`.
 
-**OPEN DECISION:** Select the production WSGI/ASGI server and worker model,
-dependency-locking approach, static-file handling, startup command, and whether
-the existing Dockerfile is adapted or a production-specific build is added.
+**OPEN DECISION:** Dependency-locking improvements, static-file handling, and
+evidence-based Gunicorn worker/timeout tuning remain future work.
 
 ### Database
 
@@ -148,6 +158,130 @@ Use standard OCI images, environment configuration, PostgreSQL, and portable
 application health checks where practical. Avoid proprietary SDKs or database
 features when standard mechanisms satisfy the requirement. Keep DNS under
 independent control and document data export and migration paths.
+
+### Canonical Environment Provisioning Baseline
+
+Use the same sequence for every hosted environment: development,
+implementation, UAT, and production. Only parameter values may differ, such as
+project/environment/service names, domains, secrets, region and capacity, and
+whether optional synthetic demo data is loaded. The procedure is operator- and
+tool-independent; the Railway CLI commands below are one reproducible way to
+perform it.
+
+1. Create or select the Railway project and target environment, then verify the
+   exact target before changing it.
+2. List existing services and confirm that the target does not already contain
+   its PostgreSQL service.
+3. Provision one Railway-managed PostgreSQL service:
+
+   ```sh
+   railway link --project <project-id-or-name> --environment <environment-name> --json
+   railway service list --json
+   railway add --database postgres --json
+   ```
+
+4. Read back the service, generated variables, persistent volume, and network
+   exposure. Store credentials only in Railway; do not copy secret values into
+   source control, documentation, command history, or application images.
+5. Keep PostgreSQL on Railway's private network. Do not add a public TCP proxy
+   unless a reviewed operational requirement documents why private access or an
+   authenticated tunnel is insufficient, who may use it, and how it is removed.
+6. Configure the future Django service using Railway variable references that
+   map the managed PostgreSQL service variables into Django's existing
+   `DATABASE_*` configuration contract:
+
+   ```sh
+   railway variable set \
+     DATABASE_HOST='${{Postgres.PGHOST}}' \
+     DATABASE_NAME='${{Postgres.PGDATABASE}}' \
+     DATABASE_USER='${{Postgres.PGUSER}}' \
+     DATABASE_PASSWORD='${{Postgres.PGPASSWORD}}' \
+     DATABASE_PORT='${{Postgres.PGPORT}}' \
+     --service <django-service>
+   ```
+
+   Expressions such as `${{Postgres.PGHOST}}` are Railway variable references,
+   not copied values. They do not rename or modify Railway's PostgreSQL
+   variables; they expose those values under the names Django already reads.
+   Secret values must remain in Railway and must not be copied into source
+   control or documentation. `Postgres` is the exact, case-sensitive database
+   service name and must be replaced if a different canonical service name is
+   chosen. Django does not currently consume `DATABASE_URL`.
+7. Configure the remaining environment values. In the internet-facing hosted
+   development environment, set `COMMERCE_ENV=production` and
+   `DJANGO_DEBUG=false`. The Railway environment name `development` identifies
+   the deployment/configuration scope; it does not select Django's security
+   mode. Production security mode intentionally requires a strong
+   `DJANGO_SECRET_KEY`, disables debug behavior, requires real
+   `DJANGO_ALLOWED_HOSTS`, enables secure cookie behavior, and supports Django
+   deployment security checks.
+8. Build/deploy the reviewed immutable application artifacts and verify health
+   and exposure.
+9. Run reviewed Django migrations as a controlled deployment operation. Django
+   migration files remain the sole authority for application schema creation
+   and evolution; provisioning PostgreSQL must not create application schema.
+10. Load required initial data or optional synthetic demo/catalog data only as a
+   separate, explicit, idempotent operation after migrations. Data loading is
+   not a schema migration and may be omitted by environment policy.
+11. Verify backup/restore controls, monitoring, access, and recovery behavior
+    before declaring the environment ready.
+
+Never make development structurally special. Development may use different
+values or opt into synthetic demo data, but it follows the same provisioning,
+migration, verification, and security sequence as implementation, UAT, and
+production.
+
+### Current Development PostgreSQL Evidence
+
+**CURRENT (2026-08-11):** Railway project `empowerment-forge.com`, environment
+`development`, contains managed service `Postgres` with a persistent volume at
+`/var/lib/postgresql/data`. Railway reports the service deployment healthy and
+the volume ready. The service has a private network endpoint and no public TCP
+proxy. No Django service, application schema migration, or catalog seed/demo
+load was performed as part of database provisioning.
+
+Railway created the database configuration variables `DATABASE_URL`, `PGDATA`,
+`PGDATABASE`, `PGHOST`, `PGPASSWORD`, `PGPORT`, `PGUSER`, `POSTGRES_DB`,
+`POSTGRES_PASSWORD`, and `POSTGRES_USER`, plus Railway service/environment and
+volume metadata variables and template settings. Secret values are intentionally
+not recorded here.
+
+### Current Development Backend Service
+
+**CURRENT (2026-08-11):** Railway service `backend` is provisioned in project
+`empowerment-forge.com`, environment `development`. Image auto-updates are
+disabled because GitHub Actions is the deployment control plane. The service
+uses these runtime controls:
+
+- Railway-generated domain `backend-development-3edc.up.railway.app`.
+- Postgres reference-variable mapping from the canonical baseline above.
+- `COMMERCE_ENV=production` and `DJANGO_DEBUG=false`.
+- Exact allowed hosts `backend-development-3edc.up.railway.app` and
+  `healthcheck.railway.app`; the latter is Railway's deployment-healthcheck
+  hostname.
+- Trusted origins `https://backend-development-3edc.up.railway.app` and
+  `https://dev-commerce.empowerment-forge.com`.
+- `DJANGO_TRUST_FORWARDED_PROTO=true` so Django can recognize HTTPS terminated
+  by Railway's proxy while retaining secure redirect/cookie behavior.
+- A strong environment-unique `DJANGO_SECRET_KEY` stored only in Railway.
+- Pre-deploy command `python manage.py migrate --noinput`.
+- Healthcheck path `/health/` with a 300-second timeout.
+
+The temporary private image source ending in `:bootstrap` exists only so an
+operator can enter Railway's separate read-only GHCR Registry Credential before
+the first release. It is not a release identity and no bootstrap image is
+published. The first successful `develop` release replaces it with a
+digest-qualified image reference.
+
+The backend's Railway public domain is intentional only for initial backend
+deployment and smoke testing. The target development architecture has
+`dev-commerce.empowerment-forge.com` as the sole public application entry point:
+frontend NGINX receives browser traffic and proxies `/api` to Django over
+Railway private networking. After that proxy path and its health/operational
+access are verified, reconsider and normally remove the backend public domain,
+then remove it from `DJANGO_ALLOWED_HOSTS` and
+`DJANGO_CSRF_TRUSTED_ORIGINS`. Keep `healthcheck.railway.app` allowed while
+Railway deployment healthchecks require it.
 
 ## DNS and TLS
 
@@ -199,24 +333,24 @@ secret manager is needed later.
 
 ## Build Pipeline
 
-**CURRENT:** GitHub Actions checks out source, uses Node 24, runs `npm ci` and
-the frontend Vitest suite, builds the backend Compose image, starts PostgreSQL
-and Django, and runs pytest. It does not currently lint or build the frontend,
-run `manage.py check --deploy`, scan dependencies/source/images, or create
-production deployment artifacts.
+**CURRENT backend path:** GitHub Actions builds
+`ghcr.io/empowerment-forge/commerce-architect-backend:<git-sha>` exactly once.
+Before publication, the workflow uses that local image to:
 
-**PLANNED stages:**
+1. Run backend pytest against disposable PostgreSQL.
+2. Run `python manage.py check` and `python manage.py check --deploy` with
+   production-mode, CI-only configuration.
+3. Apply migrations to the disposable database.
+4. Start Gunicorn from the image and require `/health/` to report both
+   application and database readiness using Railway's healthcheck hostname.
+5. Fail on fixed high/critical image vulnerabilities reported by Trivy.
 
-1. Check out the exact source revision.
-2. Install locked/reproducible dependencies.
-3. Run frontend tests.
-4. Run frontend lint.
-5. Run frontend type and production-build validation.
-6. Run backend tests against PostgreSQL.
-7. Run Django system and deployment checks with safe CI-only values.
-8. Run dependency and supply-chain scanning plus static/security analysis.
-9. Build and scan production container images where applicable.
-10. Create immutable, revision-identifiable frontend and backend artifacts.
+For a `develop` push only, the validated image is exported as a short-lived
+workflow artifact. The publish job loads that artifact; it does not rebuild the
+image. The handoff artifact has a one-day retention period and is not a release
+artifact or deployment identity. Frontend tests are also required before
+backend publication/deployment. The existing frontend lint and
+production-build gates remain planned.
 
 Every required gate must fail closed. Pin or otherwise govern build actions and
 tools, protect build credentials, generate useful provenance where practical,
@@ -224,24 +358,32 @@ and do not grant pull-request code access to deployment secrets.
 
 ## Deployment Pipeline
 
-**PLANNED sequence:**
+**CURRENT backend sequence:** A successful push/merge to `develop`, after all
+required validation jobs pass, authenticates to GHCR with the job-scoped
+`GITHUB_TOKEN` and `packages: write`. It pushes only the immutable commit tag,
+resolves the registry digest, and changes Railway's source to:
 
-1. Require all CI gates to pass for the intended revision.
-2. Select/build the immutable, revision-identifiable artifacts or images.
-3. Deploy those artifacts to the Railway development environment.
-4. Apply reviewed database migrations through the selected safe mechanism.
-5. Require service and database health checks.
-6. Run frontend and API smoke tests.
-7. Verify login, access-token use, refresh rotation, logout, and cookie behavior.
-8. Verify TLS, redirects, security headers, host/origin controls, and public
-   exposure.
-9. Observe application, platform, database, and authentication signals.
-10. Mark the deployment successful or invoke the documented rollback path.
+```text
+ghcr.io/empowerment-forge/commerce-architect-backend@sha256:<digest>
+```
 
-**OPEN DECISION:** Railway deploy trigger versus GitHub-driven deployment,
-environment approvals, artifact promotion, concurrency control, migration job,
-health timeout, and automated rollback. Deployment must prevent an older job
-from overwriting a newer successful revision.
+The repository secret `RAILWAY_TOKEN` contains a project token scoped to the
+development environment. It authorizes only the image-source update and
+deployment-status reads. Railway image auto-update is disabled. The workflow
+waits for Railway's terminal deployment status and fails unless it is
+`SUCCESS`. Job concurrency cancels an obsolete in-progress development release
+when a newer `develop` release starts. Pull requests, feature branches,
+`workflow_dispatch`, and `main` validation runs cannot publish or deploy.
+
+Railway runs `python manage.py migrate --noinput` from the same digest-qualified
+image before starting it. Migration failure prevents activation. Railway then
+requires HTTP 200 from `/health/`; failure within 300 seconds prevents traffic
+from shifting to the new deployment. Catalog/demo seeding is not part of this
+workflow.
+
+**OPEN DECISION:** Environment approvals, broader artifact promotion,
+post-deployment authentication/browser tests, and automated rollback remain to
+be implemented.
 
 ## Security
 
@@ -353,16 +495,20 @@ testing complements but does not replace manual adversarial review.
 
 **CURRENT:** Django migrations are version-controlled schema changes.
 
-**PLANNED:** Treat migrations as reviewed deployment inputs. Inspect generated
+**CURRENT:** Railway runs `python manage.py migrate --noinput` as the backend
+service pre-deploy command, using the exact candidate image and its private
+Postgres reference variables. Migration failure blocks deployment. Seed/demo
+data is deliberately excluded.
+
+Treat migrations as reviewed deployment inputs. Inspect generated
 SQL/operations when risk warrants it, test against representative disposable
 data, identify locks/runtime impact, and coordinate code/schema compatibility.
 Back up and verify recovery before destructive or difficult-to-reverse changes.
 Never allow multiple deploys to race migrations.
 
-**OPEN DECISION:** Migration execution mechanism, transaction/timeout policy,
-expand-and-contract conventions, maintenance needs, and when to forward-fix
-versus reverse a migration. A code rollback does not automatically reverse a
-database migration.
+**OPEN DECISION:** Transaction/timeout policy, expand-and-contract conventions,
+maintenance needs, and when to forward-fix versus reverse a migration. A code
+rollback does not automatically reverse a database migration.
 
 ## Rollback Strategy
 
@@ -408,14 +554,17 @@ HTTP 200 with `{"status":"ok","database":"ok"}` or HTTP 503 when the database
 is unreachable. It is covered by backend tests. Current CI waits on PostgreSQL
 but there is no documented hosted monitoring or alerting stack.
 
-**PLANNED:** Use a health signal suitable for Railway routing and deployment
-verification while avoiding internal detail leakage. Distinguish, if needed,
-process liveness from dependency readiness. Capture deployment logs,
-application errors, database connectivity failures, latency/availability, and
-suspicious authentication activity. Alert the responsible operator with a
-documented response path. Logs must omit secrets, tokens, cookies, credentials,
-database URLs, and unnecessary personal data, and must have access and retention
-controls.
+**CURRENT:** Railway gates backend deployment activation on `GET /health/`
+returning HTTP 200 within 300 seconds. Railway sends the hostname
+`healthcheck.railway.app`, which is explicitly allowed. The endpoint verifies
+Django can connect to PostgreSQL and returns HTTP 503 if it cannot.
+
+Distinguish, if needed, process liveness from dependency readiness. Capture
+deployment logs, application errors, database connectivity failures,
+latency/availability, and suspicious authentication activity. Alert the
+responsible operator with a documented response path. Logs must omit secrets,
+tokens, cookies, credentials, database URLs, and unnecessary personal data, and
+must have access and retention controls.
 
 **OPEN DECISION:** Logging destination, structured fields/correlation IDs,
 metrics and uptime checks, alert thresholds/channels, retention, on-call
@@ -472,11 +621,11 @@ Security and data protection are launch blockers, so they appear first.
 
 - Exact Railway frontend/static-hosting topology and routing.
 - Same-origin versus separate frontend/API hostnames.
-- Django production WSGI/ASGI server and worker model.
-- Backend and frontend static-file handling, caching, and compression.
-- Railway-native deploy trigger versus GitHub-driven deployment and approvals.
+- Backend worker tuning and backend/frontend static-file handling, caching, and
+  compression.
+- Deployment approvals beyond the current GitHub-driven development path.
 - Immutable artifact registry, identification, retention, and promotion.
-- Migration execution, locking/concurrency, and forward-fix/rollback policy.
+- Migration locking/concurrency and forward-fix/rollback policy.
 - Railway secret-management mechanics, access control, audit, and rotation.
 - Railway PostgreSQL networking, TLS, encryption, backups, retention, export,
   point-in-time recovery, and restore-test procedure for the selected plan.

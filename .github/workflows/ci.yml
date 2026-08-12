@@ -3,15 +3,21 @@ name: CI
 on:
   push:
     branches:
+      - develop
       - main
   pull_request:
     branches:
       - develop
   workflow_dispatch:
 
+env:
+  BACKEND_IMAGE: ghcr.io/empowerment-forge/commerce-architect-backend
+
 jobs:
-  test:
+  frontend-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -30,19 +36,31 @@ jobs:
         working-directory: frontend
         run: npm run test -- --run
 
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v4
+  backend-image-validation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
-      - name: Build containers
-        run: docker compose build web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
-      - name: Start services
-        run: docker compose up -d db web
+      - name: Build backend image once
+        run: docker build --tag "${BACKEND_IMAGE}:${GITHUB_SHA}" backend
 
-      - name: Wait for PostgreSQL
+      - name: Start CI PostgreSQL
         run: |
-          for attempt in {1..30}; do
-            if docker compose exec -T db pg_isready -U commerce -d commerce_db; then
+          docker network create commerce-backend-ci
+          docker run --detach \
+            --name commerce-backend-postgres \
+            --network commerce-backend-ci \
+            --env POSTGRES_DB=commerce_ci \
+            --env POSTGRES_USER=commerce_ci \
+            --env POSTGRES_PASSWORD=ci-only-password \
+            postgres:16-alpine
+          for _ in {1..30}; do
+            if docker exec commerce-backend-postgres \
+              pg_isready --username commerce_ci --dbname commerce_ci; then
               exit 0
             fi
             sleep 2
@@ -50,9 +68,169 @@ jobs:
           echo "PostgreSQL did not become ready within 60 seconds."
           exit 1
 
-      - name: Run pytest
-        run: docker compose exec -T web pytest
+      - name: Validate exact backend image
+        env:
+          CI_SECRET_KEY: ci-only-strong-secret-key-with-more-than-fifty-characters-123456789
+        run: |
+          image="${BACKEND_IMAGE}:${GITHUB_SHA}"
+          runtime_environment=(
+            --network commerce-backend-ci
+            --env COMMERCE_ENV=production
+            --env DJANGO_SECRET_KEY="${CI_SECRET_KEY}"
+            --env DJANGO_DEBUG=false
+            --env "DJANGO_ALLOWED_HOSTS=healthcheck.railway.app,localhost,testserver"
+            --env DJANGO_CSRF_TRUSTED_ORIGINS=https://localhost
+            --env DJANGO_TRUST_FORWARDED_PROTO=true
+            --env DJANGO_SECURE_SSL_REDIRECT=false
+            --env DATABASE_HOST=commerce-backend-postgres
+            --env DATABASE_NAME=commerce_ci
+            --env DATABASE_USER=commerce_ci
+            --env DATABASE_PASSWORD=ci-only-password
+            --env DATABASE_PORT=5432
+          )
 
-      - name: Tear down services
-        if: always()
-        run: docker compose down
+          docker run --rm "${runtime_environment[@]}" "${image}" pytest
+          docker run --rm "${runtime_environment[@]}" \
+            "${image}" python manage.py check
+          docker run --rm "${runtime_environment[@]}" \
+            --env DJANGO_SECURE_SSL_REDIRECT=true \
+            "${image}" python manage.py check --deploy
+          docker run --rm "${runtime_environment[@]}" \
+            "${image}" python manage.py migrate --noinput
+
+          docker run --detach \
+            --name commerce-backend-app \
+            --publish 8000:8000 \
+            --env PORT=8000 \
+            "${runtime_environment[@]}" \
+            --env DJANGO_SECURE_SSL_REDIRECT=true \
+            "${image}"
+
+          for _ in {1..30}; do
+            if response=$(curl --fail --silent --show-error \
+              --header 'Host: healthcheck.railway.app' \
+              --header 'X-Forwarded-Proto: https' \
+              http://127.0.0.1:8000/health/); then
+              test "$(jq -r '.status' <<<"${response}")" = "ok"
+              test "$(jq -r '.database' <<<"${response}")" = "ok"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs commerce-backend-app
+          exit 1
+
+      - name: Scan exact backend image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Export validated backend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          docker save "${BACKEND_IMAGE}:${GITHUB_SHA}" \
+            | gzip > backend-image.tar.gz
+
+      - name: Upload validated backend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-image-${{ github.sha }}
+          path: backend-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-and-deploy-backend:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs:
+      - frontend-test
+      - backend-image-validation
+    runs-on: ubuntu-latest
+    concurrency:
+      group: commerce-architect-backend-development
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download validated backend image
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-image-${{ github.sha }}
+
+      - name: Load validated backend image
+        run: gunzip --stdout backend-image.tar.gz | docker load
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish immutable commit tag
+        run: docker push "${BACKEND_IMAGE}:${GITHUB_SHA}"
+
+      - name: Resolve published image digest
+        id: image
+        run: |
+          digest=$(docker buildx imagetools inspect \
+            "${BACKEND_IMAGE}:${GITHUB_SHA}" \
+            --format '{{.Manifest.Digest}}')
+          case "${digest}" in
+            sha256:*) ;;
+            *) echo "Unable to resolve the published image digest."; exit 1 ;;
+          esac
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "Deploying ${BACKEND_IMAGE}:${GITHUB_SHA} (${digest})"
+
+      - name: Deploy exact image digest to Railway development
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          jq --null-input \
+            --arg image "${BACKEND_IMAGE}@${IMAGE_DIGEST}" \
+            '{services: {"93c267b7-e8cd-49c4-be9b-abe34aaa4373": {source: {image: $image}}}}' \
+          | npx --yes @railway/cli@5.37.4 environment edit \
+            --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+            --environment development \
+            --message "Deploy backend ${GITHUB_SHA}" \
+            --json
+
+      - name: Require successful Railway deployment
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          expected_image="${BACKEND_IMAGE}@${IMAGE_DIGEST}"
+          for _ in {1..60}; do
+            deployments=$(npx --yes @railway/cli@5.37.4 deployment list \
+              --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+              --environment development \
+              --service backend \
+              --limit 10 \
+              --json)
+            status=$(jq --raw-output --arg image "${expected_image}" \
+              '[.[] | select(.meta.image == $image)][0].status // "NOT_FOUND"' \
+              <<<"${deployments}")
+            case "${status}" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|NEEDS_APPROVAL|SLEEPING|SKIPPED|REMOVED|REMOVING)
+                echo "Railway deployment reached terminal status: ${status}"
+                exit 1
+                ;;
+              NOT_FOUND|QUEUED|INITIALIZING|WAITING|BUILDING|DEPLOYING) sleep 10 ;;
+              *) echo "Unexpected Railway deployment status: ${status}"; exit 1 ;;
+            esac
+          done
+          echo "Railway deployment did not complete within 10 minutes."
+          exit 1
