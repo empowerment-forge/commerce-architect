@@ -144,11 +144,28 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  publish-and-deploy-backend:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+  test:
+    if: always()
     needs:
       - frontend-test
       - backend-image-validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require all validation jobs
+        env:
+          FRONTEND_RESULT: ${{ needs.frontend-test.result }}
+          BACKEND_RESULT: ${{ needs.backend-image-validation.result }}
+        run: |
+          test "${FRONTEND_RESULT}" = "success"
+          test "${BACKEND_RESULT}" = "success"
+
+  publish-and-deploy-backend:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs:
+      - test
     runs-on: ubuntu-latest
     concurrency:
       group: commerce-architect-backend-development
