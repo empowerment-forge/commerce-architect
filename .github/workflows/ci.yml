@@ -77,6 +77,18 @@ jobs:
             http://127.0.0.1:8080/api/ \
             | grep --fixed-strings 'commerce-api-proxy-ok'
 
+          curl --fail --silent --show-error \
+            --header 'Host: dev-commerce.empowerment-forge.com' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8080/admin/ \
+            | grep --fixed-strings 'commerce-api-proxy-ok'
+
+          curl --fail --silent --show-error \
+            --header 'Host: dev-commerce.empowerment-forge.com' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8080/static/admin/css/base.css \
+            | grep --fixed-strings 'commerce-api-proxy-ok'
+
       - name: Scan exact frontend image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -171,6 +183,7 @@ jobs:
             --env DJANGO_SECURE_SSL_REDIRECT=true \
             "${image}"
 
+          healthy=false
           for _ in {1..30}; do
             if response=$(curl --fail --silent --show-error \
               --header 'Host: healthcheck.railway.app' \
@@ -178,12 +191,25 @@ jobs:
               http://127.0.0.1:8000/health/); then
               test "$(jq -r '.status' <<<"${response}")" = "ok"
               test "$(jq -r '.database' <<<"${response}")" = "ok"
-              exit 0
+              healthy=true
+              break
             fi
             sleep 2
           done
-          docker logs commerce-backend-app
-          exit 1
+          if [ "${healthy}" != true ]; then
+            docker logs commerce-backend-app
+            exit 1
+          fi
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' \
+            --header 'Host: healthcheck.railway.app' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8000/admin/)" = "302"
+          curl --fail --silent --show-error \
+            --header 'Host: healthcheck.railway.app' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8000/static/admin/css/base.css \
+            >/dev/null
 
       - name: Scan exact backend image
         uses: aquasecurity/trivy-action@v0.36.0
