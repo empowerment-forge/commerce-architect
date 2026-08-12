@@ -82,17 +82,22 @@ credentials, secrets, databases, backups, and access controls from hosted dev.
 
 ### Frontend
 
-**CURRENT:** Vite is development/build tooling. `npm run build` runs the
-TypeScript project build and Vite build, producing static assets in
-`frontend/dist/` by default. The Vite development server—and `vite preview`—are
-not intended as the production runtime.
+**CURRENT:** `frontend/Dockerfile` is a multi-stage production build. Its Node
+24 stage runs `npm ci`, Vitest, ESLint, and the TypeScript/Vite production
+build. The NGINX runtime stage contains only NGINX, the generated `dist/`
+assets, and the reviewed server template. Railway never runs the Vite
+development server or `vite preview`.
 
-**PLANNED:** CI will create a reproducible `dist/` artifact and publish or serve
-those immutable files using the selected production topology.
+NGINX serves the SPA with `index.html` fallback and proxies `/api/` unchanged
+to Django over Railway private networking. Runtime Railway references provide
+`BACKEND_HOST=${{backend.RAILWAY_PRIVATE_DOMAIN}}` and
+`BACKEND_PORT=${{backend.PORT}}`; no private address is baked into the image.
+NGINX preserves the public Host and forwards client/proxy addressing and HTTPS
+headers so Django evaluates requests as originating at the public application
+hostname.
 
-**OPEN DECISION:** Choose the Railway-compatible static-serving topology and
-define caching, routing/fallback behavior, compression, security headers, and
-the frontend-to-API base URL. No production frontend container exists today.
+**OPEN DECISION:** Production caching/compression and content-security-policy
+tuning remain future work after the first end-to-end deployment is proven.
 
 ### Backend
 
@@ -129,19 +134,17 @@ application-owned compensating controls.
 
 ## Target Runtime Architecture
 
-**PLANNED, HIGH LEVEL:** Railway is the selected platform for the first hosted
-environment. The intended system contains a static React frontend runtime, a
-Django API service built from an immutable OCI image, and a persistent Railway
-PostgreSQL service. Cloudflare-managed DNS will connect the custom hostname to
-the selected Railway ingress. HTTPS traffic will reach the frontend and API,
-with health visibility and controlled frontend-to-API communication.
+**CURRENT:** Railway hosts the NGINX/React frontend, Gunicorn/Django backend,
+and persistent PostgreSQL service. `dev-commerce.empowerment-forge.com` belongs
+to the existing Railway `frontend` service and is the public application entry
+point. NGINX serves the SPA and routes `/api/` to
+`backend.railway.internal` through Railway private networking. Django reaches
+PostgreSQL privately. Image configuration uses Railway references rather than
+hard-coded private hostnames or ports.
 
-**OPEN DECISION:** Determine whether frontend and API are served under one
-origin or separate hostnames/routes. This choice materially affects routing,
-CORS, CSRF, refresh-cookie behavior, TLS, and operational complexity. Prefer a
-same-site design unless implementation evidence supports another topology.
-Also decide static hosting, internal networking, public API exposure, and
-health-check routing only after Railway behavior is verified.
+The temporary Railway backend public domain remains during initial end-to-end
+verification. Once public frontend and private `/api/` behavior are proven and
+an operational access path is retained, it can be removed separately.
 
 ## Railway
 
@@ -333,6 +336,15 @@ secret manager is needed later.
 
 ## Build Pipeline
 
+**CURRENT frontend path:** GitHub Actions builds
+`ghcr.io/empowerment-forge/commerce-architect-frontend:<git-sha>` exactly once.
+The Docker build itself runs `npm ci`, Vitest, ESLint, and the Vite production
+build. CI then uses that exact runtime image to validate NGINX configuration,
+container startup, `/`, SPA fallback, and an `/api/` proxy request to a
+controlled backend target before applying the Trivy fixed high/critical gate.
+For `develop` pushes, the validated image is transferred to the publish job as
+a one-day workflow artifact and loaded without rebuilding.
+
 **CURRENT backend path:** GitHub Actions builds
 `ghcr.io/empowerment-forge/commerce-architect-backend:<git-sha>` exactly once.
 Before publication, the workflow uses that local image to:
@@ -357,6 +369,20 @@ tools, protect build credentials, generate useful provenance where practical,
 and do not grant pull-request code access to deployment secrets.
 
 ## Deployment Pipeline
+
+**CURRENT frontend sequence:** A successful `develop` push publishes only the
+validated SHA-tagged image, resolves its GHCR digest, and configures the
+existing Railway `frontend` service with:
+
+```text
+ghcr.io/empowerment-forge/commerce-architect-frontend@sha256:<digest>
+```
+
+The service keeps its existing `dev-commerce.empowerment-forge.com` custom
+domain. Railway image auto-update is disabled, `/` gates deployment health for
+300 seconds, and the workflow requires the digest-specific deployment to reach
+`SUCCESS`. Feature branches, pull requests, `main`, and manual validation runs
+cannot publish or deploy to shared development.
 
 **CURRENT backend sequence:** A successful push/merge to `develop`, after all
 required validation jobs pass, authenticates to GHCR with the job-scoped
@@ -383,7 +409,9 @@ workflow.
 
 **OPEN DECISION:** Environment approvals, broader artifact promotion,
 post-deployment authentication/browser tests, and automated rollback remain to
-be implemented.
+be implemented. Independently triggering frontend and backend deployments by
+changed path is a future optimization; this first complete milestone validates
+and deploys both images after a successful `develop` push.
 
 ## Security
 

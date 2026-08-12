@@ -12,9 +12,10 @@ on:
 
 env:
   BACKEND_IMAGE: ghcr.io/empowerment-forge/commerce-architect-backend
+  FRONTEND_IMAGE: ghcr.io/empowerment-forge/commerce-architect-frontend
 
 jobs:
-  frontend-test:
+  frontend-image-validation:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -23,18 +24,82 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
+      - name: Build frontend image once
+        run: docker build --tag "${FRONTEND_IMAGE}:${GITHUB_SHA}" frontend
+
+      - name: Start controlled API target
+        run: |
+          docker network create commerce-frontend-ci
+          docker run --detach \
+            --name commerce-frontend-api \
+            --network commerce-frontend-ci \
+            --network-alias backend-smoke \
+            hashicorp/http-echo:1.0 \
+            -listen=:8081 \
+            -text=commerce-api-proxy-ok
+
+      - name: Validate exact frontend image
+        run: |
+          image="${FRONTEND_IMAGE}:${GITHUB_SHA}"
+          docker run --rm \
+            --network commerce-frontend-ci \
+            --env PORT=8080 \
+            --env BACKEND_HOST=backend-smoke \
+            --env BACKEND_PORT=8081 \
+            "${image}" nginx -t
+
+          docker run --detach \
+            --name commerce-frontend-app \
+            --network commerce-frontend-ci \
+            --publish 8080:8080 \
+            --env PORT=8080 \
+            --env BACKEND_HOST=backend-smoke \
+            --env BACKEND_PORT=8081 \
+            "${image}"
+
+          for _ in {1..30}; do
+            if curl --fail --silent --show-error \
+              --header 'X-Forwarded-Proto: https' \
+              http://127.0.0.1:8080/ >/tmp/frontend-index.html; then
+              break
+            fi
+            sleep 2
+          done
+          grep --fixed-strings '<div id="root"></div>' /tmp/frontend-index.html
+
+          curl --fail --silent --show-error \
+            http://127.0.0.1:8080/client-side-route \
+            | grep --fixed-strings '<div id="root"></div>'
+
+          curl --fail --silent --show-error \
+            --header 'Host: dev-commerce.empowerment-forge.com' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8080/api/ \
+            | grep --fixed-strings 'commerce-api-proxy-ok'
+
+      - name: Scan exact frontend image
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          node-version: 24
+          image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
+      - name: Export validated frontend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          docker save "${FRONTEND_IMAGE}:${GITHUB_SHA}" \
+            | gzip > frontend-image.tar.gz
 
-      - name: Run frontend tests
-        working-directory: frontend
-        run: npm run test -- --run
+      - name: Upload validated frontend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-image-${{ github.sha }}
+          path: frontend-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
 
   backend-image-validation:
     runs-on: ubuntu-latest
@@ -147,7 +212,7 @@ jobs:
   test:
     if: always()
     needs:
-      - frontend-test
+      - frontend-image-validation
       - backend-image-validation
     runs-on: ubuntu-latest
     permissions:
@@ -156,7 +221,7 @@ jobs:
     steps:
       - name: Require all validation jobs
         env:
-          FRONTEND_RESULT: ${{ needs.frontend-test.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-image-validation.result }}
           BACKEND_RESULT: ${{ needs.backend-image-validation.result }}
         run: |
           test "${FRONTEND_RESULT}" = "success"
@@ -250,4 +315,94 @@ jobs:
             esac
           done
           echo "Railway deployment did not complete within 10 minutes."
+          exit 1
+
+  publish-and-deploy-frontend:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs:
+      - test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: commerce-architect-frontend-development
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download validated frontend image
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-image-${{ github.sha }}
+
+      - name: Load validated frontend image
+        run: gunzip --stdout frontend-image.tar.gz | docker load
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish immutable frontend commit tag
+        run: docker push "${FRONTEND_IMAGE}:${GITHUB_SHA}"
+
+      - name: Resolve published frontend image digest
+        id: image
+        run: |
+          digest=$(docker buildx imagetools inspect \
+            "${FRONTEND_IMAGE}:${GITHUB_SHA}" \
+            --format '{{.Manifest.Digest}}')
+          case "${digest}" in
+            sha256:*) ;;
+            *) echo "Unable to resolve the published frontend image digest."; exit 1 ;;
+          esac
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "Deploying ${FRONTEND_IMAGE}:${GITHUB_SHA} (${digest})"
+
+      - name: Deploy exact frontend image digest to Railway development
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          jq --null-input \
+            --arg image "${FRONTEND_IMAGE}@${IMAGE_DIGEST}" \
+            '{services: {"430aa8c4-88a5-4b7f-b433-9c0a3ff6e642": {source: {image: $image}}}}' \
+          | npx --yes @railway/cli@5.37.4 environment edit \
+            --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+            --environment development \
+            --message "Deploy frontend ${GITHUB_SHA}" \
+            --json
+
+      - name: Require successful Railway frontend deployment
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          expected_image="${FRONTEND_IMAGE}@${IMAGE_DIGEST}"
+          for _ in {1..60}; do
+            deployments=$(npx --yes @railway/cli@5.37.4 deployment list \
+              --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+              --environment development \
+              --service frontend \
+              --limit 10 \
+              --json)
+            status=$(jq --raw-output --arg image "${expected_image}" \
+              '[.[] | select(.meta.image == $image)][0].status // "NOT_FOUND"' \
+              <<<"${deployments}")
+            case "${status}" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|NEEDS_APPROVAL|SLEEPING|SKIPPED|REMOVED|REMOVING)
+                echo "Railway frontend deployment reached terminal status: ${status}"
+                exit 1
+                ;;
+              NOT_FOUND|QUEUED|INITIALIZING|WAITING|BUILDING|DEPLOYING) sleep 10 ;;
+              *) echo "Unexpected Railway frontend deployment status: ${status}"; exit 1 ;;
+            esac
+          done
+          echo "Railway frontend deployment did not complete within 10 minutes."
           exit 1
