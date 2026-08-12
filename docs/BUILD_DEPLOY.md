@@ -95,6 +95,10 @@ to Django over Railway private networking. Runtime Railway references provide
 Declare `PORT=8000` on the Railway backend service so `backend.PORT` is an
 exported service variable available to that cross-service reference; the
 backend image already binds Gunicorn to the same Railway `PORT` value.
+NGINX derives Railway's local DNS resolver from the running container and
+re-resolves the backend service name every ten seconds. It therefore follows
+backend instance changes instead of retaining an obsolete private IP across a
+concurrent backend deployment.
 NGINX preserves the public Host and forwards client/proxy addressing and HTTPS
 headers so Django evaluates requests as originating at the public application
 hostname.

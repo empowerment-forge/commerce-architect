@@ -15,6 +15,8 @@ FROM docker.io/library/nginx:1.29-alpine
 
 RUN apk upgrade --no-cache
 
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
