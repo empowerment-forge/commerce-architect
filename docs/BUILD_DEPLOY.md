@@ -102,6 +102,11 @@ concurrent backend deployment.
 NGINX preserves the public Host and forwards client/proxy addressing and HTTPS
 headers so Django evaluates requests as originating at the public application
 hostname.
+NGINX also proxies `/admin/` and `/static/` to that same private backend. The
+backend image runs `collectstatic` while it is built and contains the resulting
+Django Admin assets. WhiteNoise, directly after Django's security middleware,
+serves those immutable compressed/manifested files through Gunicorn; the React
+image does not contain or own Django static assets.
 
 **OPEN DECISION:** Production caching/compression and content-security-policy
 tuning remain future work after the first end-to-end deployment is proven.

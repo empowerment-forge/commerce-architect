@@ -13,7 +13,10 @@ RUN pip install --no-cache-dir --upgrade pip setuptools msgpack \
 
 COPY . ./
 
-RUN useradd --create-home --uid 10001 commerce \
+RUN COMMERCE_ENV=development \
+        DJANGO_SECRET_KEY=collectstatic-build-only-not-a-runtime-secret \
+        python manage.py collectstatic --noinput \
+    && useradd --create-home --uid 10001 commerce \
     && chown -R commerce:commerce /app
 
 USER commerce
