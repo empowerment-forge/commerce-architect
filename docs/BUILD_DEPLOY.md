@@ -92,6 +92,9 @@ NGINX serves the SPA with `index.html` fallback and proxies `/api/` unchanged
 to Django over Railway private networking. Runtime Railway references provide
 `BACKEND_HOST=${{backend.RAILWAY_PRIVATE_DOMAIN}}` and
 `BACKEND_PORT=${{backend.PORT}}`; no private address is baked into the image.
+Declare `PORT=8000` on the Railway backend service so `backend.PORT` is an
+exported service variable available to that cross-service reference; the
+backend image already binds Gunicorn to the same Railway `PORT` value.
 NGINX preserves the public Host and forwards client/proxy addressing and HTTPS
 headers so Django evaluates requests as originating at the public application
 hostname.
