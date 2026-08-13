@@ -136,6 +136,12 @@ business domains.
 
 ## Existing Authentication Foundation
 
+**IN PROGRESS / PLANNED:** The next independently testable slice is registration
+plus email verification, existing hybrid-JWT login/logout and `/me`, and minimal
+React UI. Its implementation contract is
+[ai-prompts/auth-registration-verification.md](ai-prompts/auth-registration-verification.md).
+Application code has not yet been implemented for this slice.
+
 Authentication and the broader account lifecycle remain important platform
 work, especially where required to secure and validate the hosted environment.
 The existing backend foundation includes:
@@ -158,6 +164,10 @@ The major incomplete areas are:
 - MFA
 - Production security configuration
 - Guest-to-account lifecycle
+
+For the current slice, retain Django's stock `User` and add accounts-owned email
+verification state. A custom-user migration is not justified now and would need
+a separate risk-managed plan if broader identity requirements later demand it.
 
 The broader account and authentication architecture remains under active
 assessment. That assessment includes whether django-allauth or another mature
