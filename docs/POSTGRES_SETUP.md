@@ -1,5 +1,10 @@
 # PostgreSQL Setup & Integration
 
+> **Scope:** This page covers local Compose PostgreSQL only. Hosted Railway
+> PostgreSQL provisioning and recovery are documented in
+> [ENVIRONMENT_PROVISIONING.md](ENVIRONMENT_PROVISIONING.md) and
+> [OPERATIONS.md](OPERATIONS.md).
+
 ## Version
 
 PostgreSQL 16

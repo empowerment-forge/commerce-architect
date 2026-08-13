@@ -35,6 +35,18 @@ This project follows a simplified GitFlow model to support:
 
 # Development Workflow
 
+## CI and deployment consequences
+
+- Pull requests targeting `develop` validate both production images but do not
+  publish or deploy them.
+- Pushes to `main` validate both images but do not publish or deploy them.
+- Pushes to `develop` validate, scan, publish by commit SHA, resolve immutable
+  digests, and deploy both services to the Railway development environment.
+- Feature-branch pushes do not receive deployment credentials.
+
+See [BUILD_DEPLOY.md](BUILD_DEPLOY.md) for the canonical trigger matrix and
+[OPERATIONS.md](OPERATIONS.md) for post-deployment verification.
+
 ## 1. Start a Feature
 
 ```bash

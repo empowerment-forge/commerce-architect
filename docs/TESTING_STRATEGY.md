@@ -17,7 +17,7 @@ It covers:
 - React integration testing
 - End-to-end (E2E) testing
 - CI integration
-- Codex-driven test generation standards
+- Optional AI-assisted test-generation guidance
 
 This is the single source of truth for how we ensure quality.
 
@@ -45,11 +45,13 @@ We enforce the following principles:
 - Django TestClient
 - SimpleJWT auth tests
 
-All backend tests run inside Docker:
+Backend tests run locally inside the Compose web service:
 
 docker compose exec -T web pytest
 
-CI executes this automatically.
+CI instead executes pytest against the validated production backend image with
+disposable PostgreSQL, followed by Django checks, migration checks, a smoke
+test, and Trivy image scanning.
 
 ---
 
@@ -180,7 +182,11 @@ Phase 2:
 
 ---
 
-# 7. Codex Prompt Template for Frontend Testing
+# 7. Optional AI Prompt Template for Frontend Testing
+
+AI assistance is optional tooling, not a prerequisite, test runner, or
+acceptance criterion. Developers must be able to execute and understand every
+test using the documented repository commands.
 
 Use the following prompt when generating frontend tests:
 

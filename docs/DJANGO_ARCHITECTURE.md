@@ -29,9 +29,9 @@ Structure:
 
 Core Django: - admin - auth - contenttypes - sessions - staticfiles
 
-Third-party: - rest_framework
+Third-party: - rest_framework - Simple JWT blacklist - WhiteNoise
 
-Domain: - catalog
+Project apps: - accounts - catalog - health
 
 ------------------------------------------------------------------------
 
@@ -39,13 +39,15 @@ Domain: - catalog
 
 Configured in settings.py using environment variables:
 
-DATABASES = { "default": { "ENGINE": "django.db.backends.postgresql",
-"NAME": os.environ.get("DATABASE_NAME"), "USER":
-os.environ.get("DATABASE_USER"), "PASSWORD":
-os.environ.get("DATABASE_PASSWORD"), "HOST":
-os.environ.get("DATABASE_HOST"), "PORT": "5432", } }
+`backend/config/settings.py` reads `DATABASE_NAME`, `DATABASE_USER`,
+`DATABASE_PASSWORD`, `DATABASE_HOST`, and `DATABASE_PORT`. Local Compose supplies
+development values; hosted environments use Railway references. Do not copy
+rendered database credentials into source or documentation.
 
-Docker provides these values.
+`COMMERCE_ENV` selects development or production security behavior. Hosted
+development intentionally uses `COMMERCE_ENV=production`, `DEBUG=False`,
+Gunicorn, WhiteNoise compressed-manifest static assets, and explicit hosts and
+origins. `GET /health/` checks database availability.
 
 ------------------------------------------------------------------------
 

@@ -18,6 +18,11 @@ impact, and any suggested mitigation in the private report. Maintainers will
 acknowledge the report when practical, investigate it, and coordinate disclosure
 and remediation based on severity and project capacity.
 
+If a credential may have been exposed, revoke or rotate it through the owning
+service before sharing sanitized evidence. The credential inventory and
+rotation boundaries are documented in
+[`docs/OPERATIONS.md`](docs/OPERATIONS.md#credential-inventory-and-rotation).
+
 ## Supported Versions
 
 Commerce Architect is early-stage and does not yet publish a formal support
