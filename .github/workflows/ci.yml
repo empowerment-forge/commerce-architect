@@ -58,18 +58,26 @@ jobs:
             "${image}"
 
           for _ in {1..30}; do
-            if curl --fail --silent --show-error \
+            status=$(curl --silent --show-error \
+              --output /tmp/frontend-index.html \
+              --write-out '%{http_code}' \
               --header 'X-Forwarded-Proto: https' \
-              http://127.0.0.1:8080/ >/tmp/frontend-index.html; then
+              http://127.0.0.1:8080/) || status=000
+            if [ "${status}" = "200" ]; then
               break
             fi
             sleep 2
           done
+          test "${status}" = "200"
           grep --fixed-strings '<div id="root"></div>' /tmp/frontend-index.html
 
-          curl --fail --silent --show-error \
-            http://127.0.0.1:8080/client-side-route \
-            | grep --fixed-strings '<div id="root"></div>'
+          status=$(curl --silent --show-error \
+            --output /tmp/frontend-spa-route.html \
+            --write-out '%{http_code}' \
+            http://127.0.0.1:8080/client-side-route)
+          test "${status}" = "200"
+          grep --fixed-strings '<div id="root"></div>' \
+            /tmp/frontend-spa-route.html
 
           for path in /.git/config /.env; do
             status=$(curl --silent --show-error \
