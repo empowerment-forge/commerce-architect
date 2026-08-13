@@ -46,6 +46,10 @@ server {
         proxy_set_header Connection "";
     }
 
+    location ~ /\. {
+        return 404;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
