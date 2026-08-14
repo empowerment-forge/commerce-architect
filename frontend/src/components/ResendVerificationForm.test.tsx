@@ -51,4 +51,20 @@ describe("ResendVerificationForm", () => {
 
     expect(screen.getByLabelText("Email address")).toHaveValue("alice@example.com");
   });
+
+  it("cancels an expanded recovery form and clears transient feedback", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      response({ detail: "If an eligible unverified account exists, a verification email will be sent." }, true, 202),
+    );
+    const user = userEvent.setup();
+    render(<ResendVerificationForm collapsed initialEmail="alice@example.com" />);
+
+    await user.click(screen.getByRole("button", { name: "Didn't receive the email? Resend verification" }));
+    await user.click(screen.getByRole("button", { name: "Resend verification email" }));
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
 });

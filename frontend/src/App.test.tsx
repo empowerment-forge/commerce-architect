@@ -24,6 +24,7 @@ function mockApi(routes: Record<string, () => Response>) {
 
 async function openAndFillRegistration() {
   const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Login | Register" }));
   await screen.findByRole("heading", { name: "Welcome back" });
   await user.click(screen.getByRole("button", { name: "Show register form" }));
   await user.type(screen.getByLabelText("Username"), "alice");
@@ -38,15 +39,35 @@ describe("App authentication flow", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("attempts one startup refresh and shows login after failure", async () => {
+  it("attempts one startup refresh and keeps authentication hidden after failure", async () => {
     const fetchMock = mockApi({
       "/api/auth/refresh/": () => response({ detail: "Missing" }, false, 401),
     });
 
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Login | Register" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Welcome back" })).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === "/api/auth/refresh/")).toHaveLength(1);
+  });
+
+  it("clears authentication feedback when the panel is closed and reopened", async () => {
+    mockApi({
+      "/api/auth/refresh/": () => response({}, false, 401),
+      "/api/auth/token/": () => response({ detail: "No active account found" }, false, 401),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Login | Register" }));
+    await user.type(screen.getByLabelText("Username"), "alice");
+    await user.type(screen.getByLabelText("Password"), "wrong-password");
+    await user.click(screen.getByRole("button", { name: "Login" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No active account found");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Login | Register" }));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("registers and shows the check-email result", async () => {
@@ -62,6 +83,7 @@ describe("App authentication flow", () => {
     });
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Login | Register" }));
     await screen.findByRole("heading", { name: "Welcome back" });
 
     await user.click(screen.getByRole("button", { name: "Show register form" }));
@@ -178,6 +200,7 @@ describe("App authentication flow", () => {
     });
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Login | Register" }));
     await screen.findByRole("heading", { name: "Welcome back" });
 
     await user.type(screen.getByLabelText("Username"), "alice");
@@ -195,6 +218,7 @@ describe("App authentication flow", () => {
     });
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Login | Register" }));
     await screen.findByRole("heading", { name: "Welcome back" });
 
     await user.type(screen.getByLabelText("Username"), "alice");
@@ -219,18 +243,26 @@ describe("App authentication flow", () => {
     const storageSet = vi.spyOn(Storage.prototype, "setItem");
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Login | Register" }));
     await screen.findByRole("heading", { name: "Welcome back" });
 
     await user.type(screen.getByLabelText("Username"), "alice");
     await user.type(screen.getByLabelText("Password"), "SecurePass123!");
     await user.click(screen.getByRole("button", { name: "Login" }));
-    expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "alice" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Welcome back" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "alice" }));
+    expect(await screen.findByRole("heading", { name: "Account" })).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     expect(screen.getByText("Verified")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Account settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resend verification email" })).not.toBeInTheDocument();
+    expect(screen.getByText("Account status:")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Update account" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("New email")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Account settings" }));
-    expect(screen.getByRole("heading", { name: "Account settings" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Update account" }));
+    expect(screen.getByRole("heading", { name: "Update account" })).toBeInTheDocument();
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Change email" }));
     await user.type(screen.getByLabelText("New email"), "new@example.com");
@@ -238,10 +270,11 @@ describe("App authentication flow", () => {
     expect(await screen.findByText("new@example.com")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Email changed");
     await user.click(screen.getByRole("button", { name: "Back to account" }));
-    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("Not Verified")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Logout" }));
-    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Login | Register" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Account" })).not.toBeInTheDocument();
     expect(storageSet).not.toHaveBeenCalled();
     expect(fetchMock.mock.calls.find(([url]) => url === "/api/auth/change-email/" )?.[1]).toMatchObject({
       headers: expect.objectContaining({ Authorization: "Bearer access-token" }),
@@ -256,10 +289,43 @@ describe("App authentication flow", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "alice" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Welcome back" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Account" })).not.toBeInTheDocument();
     await waitFor(() => {
       expect(fetchMock.mock.calls.filter(([url]) => url === "/api/auth/refresh/")).toHaveLength(1);
     });
+  });
+
+  it("offers authenticated resend only for an unverified account and uses its access token", async () => {
+    const fetchMock = mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response({
+        ...verifiedUser,
+        email: "current@example.com",
+        email_verified: false,
+        email_verified_at: null,
+      }),
+      "/api/auth/resend-verification-authenticated/": () => response({
+        detail: "If the account is unverified, a verification email will be sent.",
+      }, true, 202),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    expect(await screen.findByText("Not Verified")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Resend verification email" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("account is unverified");
+    const resendCall = fetchMock.mock.calls.find(
+      ([url]) => url === "/api/auth/resend-verification-authenticated/",
+    );
+    expect(resendCall?.[1]).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({ Authorization: "Bearer restored-token" }),
+    });
+    expect(resendCall?.[1]).toHaveProperty("body", undefined);
   });
 
   it("shows the committed unverified address when email-change delivery fails", async () => {
@@ -275,9 +341,10 @@ describe("App authentication flow", () => {
     });
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("button", { name: "alice" }));
     expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Account settings" }));
+    await user.click(screen.getByRole("button", { name: "Update account" }));
     await user.click(screen.getByRole("button", { name: "Change email" }));
     await user.type(screen.getByLabelText("New email"), "new@example.com");
     await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
@@ -285,7 +352,7 @@ describe("App authentication flow", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be sent");
     expect(screen.getByText("new@example.com")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back to account" }));
-    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("Not Verified")).toBeInTheDocument();
   });
 
   it("clears a failed email-change error after a corrected successful change", async () => {
@@ -306,8 +373,9 @@ describe("App authentication flow", () => {
     });
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("button", { name: "alice" }));
     expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Account settings" }));
+    await user.click(screen.getByRole("button", { name: "Update account" }));
     await user.click(screen.getByRole("button", { name: "Change email" }));
 
     await user.type(screen.getByLabelText("New email"), "taken@example.com");

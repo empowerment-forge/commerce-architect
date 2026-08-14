@@ -21,6 +21,7 @@ from .serializers import (
 from .services import (
     change_email,
     is_verified,
+    normalize_email,
     resend_verification,
     send_verification_email,
     verification_metadata,
@@ -136,6 +137,26 @@ class ResendVerificationView(APIView):
                 pass
 
         return Response({"detail": RESEND_DETAIL}, status=status.HTTP_202_ACCEPTED)
+
+
+class AuthenticatedResendVerificationView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        issued = resend_verification(normalize_email(request.user.email))
+        if issued:
+            try:
+                send_verification_email(issued)
+            except (ValueError, OSError):
+                return Response(
+                    DELIVERY_ERROR,
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+        return Response(
+            {"detail": "If the account is unverified, a verification email will be sent."},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class TokenObtainCookieView(APIView):

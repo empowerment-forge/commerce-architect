@@ -292,6 +292,78 @@ def test_resend_cooldown_and_verified_account_send_nothing(client):
 
 
 @pytest.mark.django_db
+def test_authenticated_resend_targets_current_email_and_rotates_token(client):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, original = verification_params()
+    verification = EmailVerification.objects.get(user__username="newuser")
+    verification.last_sent_at = timezone.now() - timedelta(minutes=2)
+    verification.save(update_fields=["last_sent_at"])
+    login = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+
+    resent = client.post(
+        "/api/auth/resend-verification-authenticated/",
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {login.json()['access']}",
+    )
+    _, replacement = verification_params()
+
+    assert resent.status_code == 202
+    assert mail.outbox[-1].to == ["newuser@example.com"]
+    assert replacement["token"] != original["token"]
+    assert client.post(
+        "/api/auth/verify-email/", original, content_type="application/json"
+    ).status_code == 400
+    assert client.post(
+        "/api/auth/verify-email/", replacement, content_type="application/json"
+    ).status_code == 200
+
+
+@pytest.mark.django_db
+def test_authenticated_resend_requires_authentication(client):
+    response = client.post(
+        "/api/auth/resend-verification-authenticated/",
+        content_type="application/json",
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_authenticated_resend_reports_delivery_failure(client):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    verification = EmailVerification.objects.get(user__username="newuser")
+    verification.last_sent_at = timezone.now() - timedelta(minutes=2)
+    verification.save(update_fields=["last_sent_at"])
+    login = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+
+    with patch("accounts.views.send_verification_email", side_effect=OSError):
+        response = client.post(
+            "/api/auth/resend-verification-authenticated/",
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {login.json()['access']}",
+        )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "verification_delivery_failed"
+
+
+@pytest.mark.django_db
 def test_token_obtain_success_sets_refresh_cookie(client):
     User.objects.create_user(username="loginuser", password="SecurePass123!")
 

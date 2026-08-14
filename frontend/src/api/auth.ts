@@ -45,6 +45,13 @@ export function resendVerification(email: string) {
   });
 }
 
+export function resendVerificationAuthenticated(accessToken: string) {
+  return apiRequest<{ detail: string }>("/api/auth/resend-verification-authenticated/", {
+    method: "POST",
+    token: accessToken,
+  });
+}
+
 export function loginAccount(username: string, password: string) {
   return apiRequest<{ access: string }>("/api/auth/token/", {
     method: "POST",

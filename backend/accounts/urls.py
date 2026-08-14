@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    AuthenticatedResendVerificationView,
     ChangeEmailView,
     LogoutView,
     MeView,
@@ -18,6 +19,11 @@ urlpatterns = [
         "resend-verification/",
         ResendVerificationView.as_view(),
         name="resend_verification",
+    ),
+    path(
+        "resend-verification-authenticated/",
+        AuthenticatedResendVerificationView.as_view(),
+        name="resend_verification_authenticated",
     ),
     path("change-email/", ChangeEmailView.as_view(), name="change_email"),
     path("token/", TokenObtainCookieView.as_view(), name="token_obtain_pair"),

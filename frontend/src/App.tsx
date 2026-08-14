@@ -8,6 +8,7 @@ import {
   logoutAccount,
   refreshAccessToken,
   registerAccount,
+  resendVerificationAuthenticated,
 } from "./api/auth";
 import type { AuthUser } from "./api/auth";
 import { ApiError } from "./api/client";
@@ -28,6 +29,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 type AuthPanelProps = {
+  onClose: () => void;
   onLogin: (access: string, user: AuthUser) => void;
 };
 
@@ -67,7 +69,7 @@ function FieldErrors({ field, errors }: { field: RegistrationField; errors?: str
   );
 }
 
-function AuthPanel({ onLogin }: AuthPanelProps) {
+function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +130,9 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex justify-end">
+        <button className="text-sm font-medium text-slate-600 underline" onClick={onClose} type="button">Close</button>
+      </div>
       <div className="flex gap-2" aria-label="Authentication mode">
         {(["login", "register"] as const).map((item) => (
           <button
@@ -176,18 +181,40 @@ type AccountPanelProps = {
   user: AuthUser;
   onUserChange: (user: AuthUser) => void;
   onLogout: () => void;
+  onClose: () => void;
 };
 
-function AccountPanel({ accessToken, user, onUserChange, onLogout }: AccountPanelProps) {
+function AccountPanel({ accessToken, user, onUserChange, onLogout, onClose }: AccountPanelProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
 
   function clearFeedback() {
     setMessage(null);
     setError(null);
+    setResendMessage(null);
+    setResendError(null);
+  }
+
+  async function resendCurrentEmail() {
+    setResendBusy(true);
+    setResendMessage(null);
+    setResendError(null);
+    try {
+      const result = await resendVerificationAuthenticated(accessToken);
+      setResendError(null);
+      setResendMessage(result.detail);
+    } catch (requestError) {
+      setResendMessage(null);
+      setResendError(errorMessage(requestError, "Unable to resend verification email. Please try again."));
+    } finally {
+      setResendBusy(false);
+    }
   }
 
   function closeSettings() {
@@ -234,7 +261,7 @@ function AccountPanel({ accessToken, user, onUserChange, onLogout }: AccountPane
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold">Account settings</h2>
+            <h2 className="text-xl font-semibold">Update account</h2>
             <p className="mt-2"><span className="font-medium">Current email:</span> {user.email}</p>
           </div>
           <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium disabled:opacity-60" disabled={emailBusy} onClick={closeSettings} type="button">Back to account</button>
@@ -269,17 +296,25 @@ function AccountPanel({ accessToken, user, onUserChange, onLogout }: AccountPane
     <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold">Authenticated account</h2>
+          <h2 className="text-xl font-semibold">Account</h2>
           <p className="mt-2"><span className="font-medium">Username:</span> {user.username}</p>
           <p><span className="font-medium">Email:</span> {user.email}</p>
           <p>
-            <span className="font-medium">Verification:</span>{" "}
-            {user.email_verified ? "Verified" : "Not verified"}
+            <span className="font-medium">Account status:</span>{" "}
+            {user.email_verified ? "Verified" : "Not Verified"}
+            {!user.email_verified && (
+              <button className="ml-3 text-sm font-medium text-blue-700 underline disabled:opacity-60" disabled={resendBusy} onClick={resendCurrentEmail} type="button">
+                {resendBusy ? "Sending…" : "Resend verification email"}
+              </button>
+            )}
           </p>
+          {resendMessage && <p className="mt-2 text-sm text-emerald-700" role="status">{resendMessage}</p>}
+          {resendError && <p className="mt-2 text-sm text-red-700" role="alert">{resendError}</p>}
         </div>
         <div className="flex gap-3">
-          <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium" onClick={() => { clearFeedback(); setSettingsOpen(true); }} type="button">Account settings</button>
+          <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium" onClick={() => { clearFeedback(); setSettingsOpen(true); }} type="button">Update account</button>
           <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium" onClick={onLogout} type="button">Logout</button>
+          <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium" onClick={() => { clearFeedback(); onClose(); }} type="button">Close</button>
         </div>
       </div>
     </section>
@@ -290,6 +325,7 @@ function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [restoring, setRestoring] = useState(true);
+  const [visiblePanel, setVisiblePanel] = useState<"auth" | "account" | null>(null);
   const refreshStarted = useRef(false);
 
   useEffect(() => {
@@ -318,26 +354,37 @@ function App() {
     } finally {
       setAccessToken(null);
       setUser(null);
+      setVisiblePanel(null);
     }
   }
 
   return (
     <>
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
-          <h1 className="text-2xl font-bold">Commerce Architect</h1>
-          <p className="mt-1 text-sm text-slate-600">Authentication and catalog development surface</p>
+        <div className="mx-auto flex max-w-6xl items-start justify-between gap-4 px-4 py-5 sm:px-6">
+          <div>
+            <h1 className="text-2xl font-bold">Commerce Architect</h1>
+            <p className="mt-1 text-sm text-slate-600">Authentication and catalog development surface</p>
+          </div>
+          {!restoring && (
+            user && accessToken ? (
+              <button className="text-sm font-semibold text-blue-700 underline" onClick={() => setVisiblePanel("account")} type="button">{user.username}</button>
+            ) : (
+              <button className="text-sm font-semibold text-blue-700 underline" onClick={() => setVisiblePanel("auth")} type="button">Login | Register</button>
+            )
+          )}
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
-        {restoring ? (
-          <p className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">Restoring session…</p>
-        ) : user && accessToken ? (
-          <AccountPanel accessToken={accessToken} onLogout={logout} onUserChange={setUser} user={user} />
-        ) : (
-          <AuthPanel onLogin={(access, currentUser) => { setAccessToken(access); setUser(currentUser); }} />
-        )}
-      </main>
+      {!restoring && visiblePanel !== null && (
+        <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
+          {visiblePanel === "account" && user && accessToken && (
+            <AccountPanel accessToken={accessToken} onClose={() => setVisiblePanel(null)} onLogout={logout} onUserChange={setUser} user={user} />
+          )}
+          {visiblePanel === "auth" && !user && !accessToken && (
+            <AuthPanel onClose={() => setVisiblePanel(null)} onLogin={(access, currentUser) => { setAccessToken(access); setUser(currentUser); setVisiblePanel(null); }} />
+          )}
+        </main>
+      )}
       <ProductListPage />
     </>
   );

@@ -7,16 +7,25 @@ import { ApiError } from "../api/client";
 type ResendVerificationFormProps = {
   collapsed?: boolean;
   initialEmail?: string;
+  onCancel?: () => void;
 };
 
 export function ResendVerificationForm({
   collapsed = false,
   initialEmail = "",
+  onCancel,
 }: ResendVerificationFormProps) {
   const [open, setOpen] = useState(!collapsed);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  function cancel() {
+    setMessage(null);
+    setError(null);
+    if (collapsed) setOpen(false);
+    onCancel?.();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,13 +71,20 @@ export function ResendVerificationForm({
         required
         type="email"
       />
-      <button
-        className="mt-3 rounded-md border border-blue-700 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-60"
-        disabled={busy}
-        type="submit"
-      >
-        {busy ? "Requesting…" : "Resend verification email"}
-      </button>
+      <div className="mt-3 flex gap-3">
+        <button
+          className="rounded-md border border-blue-700 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-60"
+          disabled={busy}
+          type="submit"
+        >
+          {busy ? "Requesting…" : "Resend verification email"}
+        </button>
+        {(collapsed || onCancel) && (
+          <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium disabled:opacity-60" disabled={busy} onClick={cancel} type="button">
+            Cancel
+          </button>
+        )}
+      </div>
       {message && <p className="mt-3 text-sm text-emerald-700" role="status">{message}</p>}
       {error && <p className="mt-3 text-sm text-red-700" role="alert">{error}</p>}
     </form>

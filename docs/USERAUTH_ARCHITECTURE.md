@@ -37,6 +37,8 @@ All current authentication routes are mounted under `/api/auth/`:
     verifies the exact normalized address to which it was issued.
 -   `POST /api/auth/resend-verification/` returns an enumeration-resistant
     response and, when eligible, rotates the token for the current address.
+-   `POST /api/auth/resend-verification-authenticated/` derives the address
+    from the authenticated user and applies the same cooldown and token rotation.
 -   `POST /api/auth/change-email/` requires JWT authentication, changes the
     current address, invalidates prior verification/tokens, and sends a new link.
 -   `POST /api/auth/token/` validates credentials, returns an access token in
