@@ -9,8 +9,10 @@ fetch-based API client.
   exposed to JavaScript.
 - One startup call to `POST /api/auth/refresh/` can restore an existing session;
   a successful response is followed by `GET /api/auth/me/`.
-- Failed startup refresh clears anonymous state. This slice does not implement a
-  general concurrent-refresh/retry queue.
+- Authenticated requests use the current in-memory access token. On a 401 they
+  share one in-progress refresh-cookie request, replace the access token in
+  memory, and retry the original request exactly once. Refresh failure clears
+  local authentication state and returns the UI to login.
 - No authentication token is written to localStorage or sessionStorage.
 - Logout calls the backend and clears frontend state even when backend cleanup
   fails.

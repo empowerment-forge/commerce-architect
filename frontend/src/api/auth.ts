@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+import type { AuthenticatedRequester } from "./client";
 
 export type AuthUser = {
   id: number;
@@ -45,10 +46,9 @@ export function resendVerification(email: string) {
   });
 }
 
-export function resendVerificationAuthenticated(accessToken: string) {
-  return apiRequest<{ code: "verification_email_sent"; detail: string }>("/api/auth/resend-verification-authenticated/", {
+export function resendVerificationAuthenticated(request: AuthenticatedRequester) {
+  return request<{ code: "verification_email_sent"; detail: string }>("/api/auth/resend-verification-authenticated/", {
     method: "POST",
-    token: accessToken,
   });
 }
 
@@ -67,14 +67,14 @@ export function refreshAccessToken() {
   });
 }
 
-export function getCurrentUser(accessToken: string) {
-  return apiRequest<AuthUser>("/api/auth/me/", { token: accessToken });
+export function getCurrentUser(request: AuthenticatedRequester) {
+  return request<AuthUser>("/api/auth/me/");
 }
 
-export function changeEmail(accessToken: string, email: string) {
-  return apiRequest<{ email: string; email_verified: false; detail: string }>(
+export function changeEmail(request: AuthenticatedRequester, email: string) {
+  return request<{ email: string; email_verified: false; detail: string }>(
     "/api/auth/change-email/",
-    { method: "POST", body: { email }, token: accessToken },
+    { method: "POST", body: { email } },
   );
 }
 

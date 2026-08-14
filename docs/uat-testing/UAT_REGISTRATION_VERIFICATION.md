@@ -318,16 +318,23 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 
 **Steps**
 
-1. Select `Update account`, then `Change email`.
-2. Confirm Cancel and `Back to account` close their respective views cleanly.
-3. Reopen the workflow and submit an invalid or already-reserved email.
-4. Correct it to `uat_auth_01_changed@example.com` and submit.
+1. Log in and leave the page open for more than 10 minutes so the in-memory
+   access token is stale while the 7-day refresh cookie remains valid.
+2. Select `Update account`, then `Change email`.
+3. Confirm Cancel and `Back to account` close their respective views cleanly.
+4. Reopen the workflow and submit an invalid or already-reserved email.
+5. Correct it to `uat_auth_01_changed@example.com` and submit.
+6. In browser network tools, confirm the stale access request receives 401,
+   one `POST /api/auth/refresh/` succeeds, and change-email is retried once.
 
 **Expected**
 
 -   Email controls are absent from the default Account summary.
 -   Invalid changes display a clear error.
 -   A corrected successful change removes the prior error and shows only success.
+-   The expired access token is replaced silently from the still-valid HttpOnly
+    refresh-cookie session; the action succeeds and the user remains logged in.
+-   No raw JWT/token-library error is displayed.
 -   The current email updates and account status immediately becomes
     `Not Verified`.
 
@@ -460,9 +467,40 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 
 -
 
+### Scenario 19 — Session lifecycle refresh and expiry
+
+**Steps**
+
+1. Log in, leave the page open for more than 10 minutes, and perform an
+   authenticated action such as opening/restoring Account, changing email, or
+   resending verification.
+2. Confirm the access request receives 401, refresh succeeds, and the original
+   action succeeds on one retry without another login.
+3. Log out (or otherwise invalidate/delete the refresh cookie), then repeat an
+   authenticated action from a page that still holds a stale access token.
+
+**Expected**
+
+-   Authenticated session → access token expires → authenticated action → one
+    silent refresh → one retry → action succeeds → user remains logged in.
+-   Concurrent stale authenticated requests share one in-progress refresh and
+    do not race refresh-token rotation.
+-   Access + refresh unusable → in-memory authentication clears → logged-out UI
+    appears → `Your session has expired. Please log in again.` is shown.
+-   No raw SimpleJWT error is exposed and no request retries indefinitely.
+
+**Actual**
+
+- [ ] PASS
+- [ ] FAIL
+
+**Notes**
+
+-
+
 ## UAT Summary
 
--   Total scenarios: 18
+-   Total scenarios: 19
 -   Passed:
 -   Failed:
 -   Blocked:

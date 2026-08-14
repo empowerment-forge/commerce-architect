@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import Client
 from django.utils import timezone
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from datetime import timedelta
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
@@ -785,6 +785,39 @@ def test_access_token_works_for_protected_endpoint(client):
 
     assert protected_response.status_code == 200
     assert protected_response.json()["username"] == "accessuser"
+
+
+@pytest.mark.django_db
+def test_expired_access_is_rejected_while_refresh_cookie_issues_replacement(client):
+    user = User.objects.create_user(username="lifecycleuser", password="SecurePass123!")
+    login_response = client.post(
+        "/api/auth/token/",
+        {"username": "lifecycleuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    refresh_cookie = login_response.cookies["refresh_token"]
+    refresh = RefreshToken(refresh_cookie.value)
+    expired_access = AccessToken.for_user(user)
+    expired_access.set_exp(from_time=timezone.now() - timedelta(minutes=11))
+
+    protected_response = client.get(
+        "/api/auth/me/",
+        HTTP_AUTHORIZATION=f"Bearer {expired_access}",
+    )
+    refresh_response = client.post("/api/auth/refresh/")
+
+    assert settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] == timedelta(minutes=10)
+    assert settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"] == timedelta(days=7)
+    assert expired_access["exp"] < int(timezone.now().timestamp())
+    assert refresh["exp"] > int(timezone.now().timestamp())
+    assert refresh_cookie["httponly"] is True
+    assert refresh_cookie["max-age"] == 7 * 24 * 60 * 60
+    assert protected_response.status_code == 401
+    assert protected_response.json()["code"] == "token_not_valid"
+    assert refresh_response.status_code == 200
+    replacement = AccessToken(refresh_response.json()["access"])
+    assert replacement["exp"] > int(timezone.now().timestamp())
+    assert "refresh_token" in refresh_response.cookies
 
 
 @pytest.mark.django_db

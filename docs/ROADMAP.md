@@ -157,7 +157,8 @@ The existing backend foundation includes:
 The major incomplete areas are:
 
 - Broader password/account policy hardening
-- General concurrent access-token refresh/retry behavior
+- Broader adoption of the implemented single-flight access-token refresh/retry
+  helper as future authenticated frontend operations are added
 - Password reset and recovery
 - MFA
 - Production security configuration

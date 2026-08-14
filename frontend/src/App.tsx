@@ -11,13 +11,15 @@ import {
   resendVerificationAuthenticated,
 } from "./api/auth";
 import type { AuthUser } from "./api/auth";
-import { ApiError } from "./api/client";
+import { ApiError, createAuthenticatedRequester, SessionExpiredError, SESSION_EXPIRED_MESSAGE } from "./api/client";
+import type { AuthenticatedRequester } from "./api/client";
 import { KnownEmailResend } from "./components/KnownEmailResend";
 import { ResendVerificationForm } from "./components/ResendVerificationForm";
 import { ProductListPage } from "./pages/ProductListPage";
 import { VerificationPage } from "./pages/VerificationPage";
 
 function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof SessionExpiredError) return SESSION_EXPIRED_MESSAGE;
   if (!(error instanceof ApiError)) return fallback;
   if (error.body.code === "email_not_verified") {
     return "Verify your current email address before logging in.";
@@ -31,7 +33,7 @@ function errorMessage(error: unknown, fallback: string): string {
 
 type AuthPanelProps = {
   onClose: () => void;
-  onLogin: (access: string, user: AuthUser) => void;
+  onLogin: (access: string) => Promise<void>;
 };
 
 type RegistrationField = "username" | "email" | "password";
@@ -106,8 +108,7 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
           String(data.get("username")),
           String(data.get("password")),
         );
-        const user = await getCurrentUser(result.access);
-        onLogin(result.access, user);
+        await onLogin(result.access);
       }
     } catch (requestError) {
       setMessage(null);
@@ -189,14 +190,14 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
 }
 
 type AccountPanelProps = {
-  accessToken: string;
+  request: AuthenticatedRequester;
   user: AuthUser;
   onUserChange: (user: AuthUser) => void;
   onLogout: () => void;
   onClose: () => void;
 };
 
-function AccountPanel({ accessToken, user, onUserChange, onLogout, onClose }: AccountPanelProps) {
+function AccountPanel({ request, user, onUserChange, onLogout, onClose }: AccountPanelProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -218,7 +219,7 @@ function AccountPanel({ accessToken, user, onUserChange, onLogout, onClose }: Ac
     setResendMessage(null);
     setResendError(null);
     try {
-      const result = await resendVerificationAuthenticated(accessToken);
+      const result = await resendVerificationAuthenticated(request);
       setResendError(null);
       setResendMessage(result.detail);
     } catch (requestError) {
@@ -242,7 +243,7 @@ function AccountPanel({ accessToken, user, onUserChange, onLogout, onClose }: Ac
     clearFeedback();
     const email = String(new FormData(form).get("email"));
     try {
-      const result = await changeEmail(accessToken, email);
+      const result = await changeEmail(request, email);
       onUserChange({ ...user, email: result.email, email_verified: false, email_verified_at: null });
       setError(null);
       setMessage(result.detail);
@@ -338,23 +339,46 @@ function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [restoring, setRestoring] = useState(true);
   const [visiblePanel, setVisiblePanel] = useState<"auth" | "account" | null>(null);
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
+  const accessTokenRef = useRef<string | null>(null);
   const refreshStarted = useRef(false);
+
+  function storeAccessToken(access: string | null) {
+    accessTokenRef.current = access;
+    setAccessToken(access);
+  }
+
+  // The getter closes over the ref but reads it only when a request executes.
+  // eslint-disable-next-line react-hooks/refs
+  const [authenticatedRequest] = useState<AuthenticatedRequester>(() =>
+    createAuthenticatedRequester({
+      getAccessToken: () => accessTokenRef.current,
+      refreshAccessToken,
+      onAccessToken: (access) => storeAccessToken(access),
+      onSessionExpired: () => {
+        storeAccessToken(null);
+        setUser(null);
+        setVisiblePanel("auth");
+        setSessionMessage(SESSION_EXPIRED_MESSAGE);
+      },
+    }),
+  );
 
   useEffect(() => {
     if (refreshStarted.current) return;
     refreshStarted.current = true;
     refreshAccessToken()
       .then(async ({ access }) => {
-        const currentUser = await getCurrentUser(access);
-        setAccessToken(access);
+        storeAccessToken(access);
+        const currentUser = await getCurrentUser(authenticatedRequest);
         setUser(currentUser);
       })
       .catch(() => {
-        setAccessToken(null);
+        storeAccessToken(null);
         setUser(null);
       })
       .finally(() => setRestoring(false));
-  }, []);
+  }, [authenticatedRequest]);
 
   if (window.location.pathname === "/verify-email") return <VerificationPage />;
 
@@ -364,9 +388,10 @@ function App() {
     } catch {
       // Local authentication state must clear even if server cleanup is unavailable.
     } finally {
-      setAccessToken(null);
+      storeAccessToken(null);
       setUser(null);
       setVisiblePanel(null);
+      setSessionMessage(null);
     }
   }
 
@@ -389,11 +414,21 @@ function App() {
       </header>
       {!restoring && visiblePanel !== null && (
         <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
+          {sessionMessage && <p className="mb-4 text-sm text-red-700" role="alert">{sessionMessage}</p>}
           {visiblePanel === "account" && user && accessToken && (
-            <AccountPanel accessToken={accessToken} onClose={() => setVisiblePanel(null)} onLogout={logout} onUserChange={setUser} user={user} />
+            <AccountPanel request={authenticatedRequest} onClose={() => setVisiblePanel(null)} onLogout={logout} onUserChange={setUser} user={user} />
           )}
           {visiblePanel === "auth" && !user && !accessToken && (
-            <AuthPanel onClose={() => setVisiblePanel(null)} onLogin={(access, currentUser) => { setAccessToken(access); setUser(currentUser); setVisiblePanel(null); }} />
+            <AuthPanel
+              onClose={() => { setVisiblePanel(null); setSessionMessage(null); }}
+              onLogin={async (access) => {
+                storeAccessToken(access);
+                const currentUser = await getCurrentUser(authenticatedRequest);
+                setUser(currentUser);
+                setSessionMessage(null);
+                setVisiblePanel(null);
+              }}
+            />
           )}
         </main>
       )}

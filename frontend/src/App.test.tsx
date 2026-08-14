@@ -327,6 +327,72 @@ describe("App authentication flow", () => {
     });
   });
 
+  it("silently refreshes stale access for change-email and stays logged in", async () => {
+    let refreshCalls = 0;
+    let changeCalls = 0;
+    const fetchMock = mockApi({
+      "/api/auth/refresh/": () => {
+        refreshCalls += 1;
+        return response({ access: refreshCalls === 1 ? "stale-access" : "fresh-access" });
+      },
+      "/api/auth/me/": () => response(verifiedUser),
+      "/api/auth/change-email/": () => {
+        changeCalls += 1;
+        return changeCalls === 1
+          ? response({ detail: "Given token not valid for any token type", code: "token_not_valid" }, false, 401)
+          : response({ email: "new@example.com", email_verified: false, detail: "Email changed" });
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    await user.click(screen.getByRole("button", { name: "Update account" }));
+    await user.click(screen.getByRole("button", { name: "Change email" }));
+    await user.type(screen.getByLabelText("New email"), "new@example.com");
+    await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Email changed");
+    expect(screen.getByRole("button", { name: "alice" })).toBeInTheDocument();
+    expect(refreshCalls).toBe(2);
+    expect(changeCalls).toBe(2);
+    const changeRequests = fetchMock.mock.calls.filter(([url]) => url === "/api/auth/change-email/");
+    expect(changeRequests[1][1]).toMatchObject({
+      headers: expect.objectContaining({ Authorization: "Bearer fresh-access" }),
+    });
+  });
+
+  it("returns to login with a safe message when stale access cannot refresh", async () => {
+    let refreshCalls = 0;
+    mockApi({
+      "/api/auth/refresh/": () => {
+        refreshCalls += 1;
+        return refreshCalls === 1
+          ? response({ access: "stale-access" })
+          : response({ detail: "Token is blacklisted", code: "token_not_valid" }, false, 401);
+      },
+      "/api/auth/me/": () => response(verifiedUser),
+      "/api/auth/change-email/": () => response(
+        { detail: "Given token not valid for any token type", code: "token_not_valid" },
+        false,
+        401,
+      ),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    await user.click(screen.getByRole("button", { name: "Update account" }));
+    await user.click(screen.getByRole("button", { name: "Change email" }));
+    await user.type(screen.getByLabelText("New email"), "new@example.com");
+    await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your session has expired. Please log in again.");
+    expect(screen.queryByText(/Given token not valid/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Login | Register" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "alice" })).not.toBeInTheDocument();
+  });
+
   it("offers authenticated resend only for an unverified account and uses its access token", async () => {
     const fetchMock = mockApi({
       "/api/auth/refresh/": () => response({ access: "restored-token" }),
