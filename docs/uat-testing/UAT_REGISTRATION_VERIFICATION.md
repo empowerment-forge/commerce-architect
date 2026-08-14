@@ -498,9 +498,42 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 
 -
 
+### Scenario 20 — Real SMTP verification delivery
+
+**Preconditions**
+
+-   Configure the SMTP backend and `SMTP_*` variables outside the repository.
+-   Use a real test inbox and the expected verified sender:
+    `Commerce Architect <accounts@empowerment-forge.com>`.
+
+**Steps**
+
+1. Register a new account using the real test inbox.
+2. Confirm the configured SMTP provider reports successful delivery and the
+   message arrives in the inbox.
+3. Confirm the visible sender is the expected Commerce Architect address.
+4. Open the verification link from the delivered message.
+5. Confirm verification succeeds, then log in with the registered credentials.
+
+**Expected**
+
+-   Registration sends through the configured provider-neutral SMTP mailer.
+-   The message arrives from the expected Commerce Architect sender without
+    exposing SMTP credentials in UI, application logs, or errors.
+-   The delivered link verifies the account and the verified account can log in.
+
+**Actual**
+
+- [ ] PASS
+- [ ] FAIL
+
+**Notes**
+
+-
+
 ## UAT Summary
 
--   Total scenarios: 19
+-   Total scenarios: 20
 -   Passed:
 -   Failed:
 -   Blocked:

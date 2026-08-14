@@ -75,9 +75,13 @@ to false for migration compatibility, while local Compose enables it for the
 complete manual journey. When enabled, correct credentials for an unverified
 current address return 403 without issuing a refresh cookie.
 
-Local development uses Django's console email backend. Verification links appear
-in backend logs and open the frontend `/verify-email` page, which removes the raw
-query token from browser history and submits verification by POST.
+Local development defaults to the readable console email backend. For real-mail
+UAT and production, the same `send_mail()` path can use any standards-compatible
+SMTP provider through Django 6.1 `MAILERS` options supplied by environment
+variables. Resend SMTP is the currently tested example; the application has no
+provider SDK dependency. Verification links open the frontend `/verify-email`
+page, which removes the raw query token from browser history and submits
+verification by POST.
 
 ## Access Token
 

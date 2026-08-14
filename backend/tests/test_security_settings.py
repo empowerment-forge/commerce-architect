@@ -21,6 +21,13 @@ SECURITY_ENV_NAMES = (
     "AUTH_FRONTEND_BASE_URL",
     "EMAIL_BACKEND",
     "DEFAULT_FROM_EMAIL",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USERNAME",
+    "SMTP_PASSWORD",
+    "SMTP_USE_TLS",
+    "SMTP_USE_SSL",
+    "SMTP_TIMEOUT",
     "DATABASE_HOST",
     "DATABASE_NAME",
     "DATABASE_USER",
@@ -51,9 +58,23 @@ print(json.dumps({
     "resend_cooldown": settings.AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS,
     "auth_frontend_base_url": settings.AUTH_FRONTEND_BASE_URL,
     "email_backend": settings.MAILERS["default"]["BACKEND"],
+    "mailer_options": {
+        key: ("configured" if key == "password" else value)
+        for key, value in settings.MAILERS["default"].get("OPTIONS", {}).items()
+    },
     "default_from_email": settings.DEFAULT_FROM_EMAIL,
 }))
 """
+
+SMTP_ENV = {
+    "SMTP_HOST": "smtp.example.com",
+    "SMTP_PORT": "587",
+    "SMTP_USERNAME": "smtp-user",
+    "SMTP_PASSWORD": "smtp-test-password",
+    "SMTP_USE_TLS": "true",
+    "SMTP_USE_SSL": "false",
+    "SMTP_TIMEOUT": "15",
+}
 
 
 def run_settings_probe(**overrides):
@@ -103,6 +124,69 @@ def test_development_loads_with_explicit_safe_environment():
     assert settings["resend_cooldown"] == 60
     assert settings["auth_frontend_base_url"] == "http://localhost:5173"
     assert settings["email_backend"] == "accounts.mail.ReadableConsoleEmailBackend"
+    assert settings["mailer_options"] == {}
+
+
+def test_development_builds_smtp_mailer_options():
+    result = run_settings_probe(
+        COMMERCE_ENV="development",
+        DJANGO_SECRET_KEY="django-insecure-development-only-not-for-production",
+        EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
+        **SMTP_ENV,
+    )
+
+    assert result.returncode == 0, result.stderr
+    mailer = json.loads(result.stdout)
+    assert mailer["email_backend"] == "django.core.mail.backends.smtp.EmailBackend"
+    assert mailer["mailer_options"] == {
+        "host": "smtp.example.com",
+        "port": 587,
+        "username": "smtp-user",
+        "password": "configured",
+        "use_tls": True,
+        "use_ssl": False,
+        "timeout": 15,
+    }
+
+
+def test_smtp_requires_credentials_and_valid_connection_options():
+    base = {
+        "COMMERCE_ENV": "development",
+        "DJANGO_SECRET_KEY": "django-insecure-development-only-not-for-production",
+        "EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+    }
+
+    missing = run_settings_probe(**base)
+    assert missing.returncode != 0
+    assert "SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD" in missing.stderr
+
+    invalid_port = run_settings_probe(**base, **{**SMTP_ENV, "SMTP_PORT": "70000"})
+    assert invalid_port.returncode != 0
+    assert "SMTP_PORT must be between 1 and 65535" in invalid_port.stderr
+
+    invalid_timeout = run_settings_probe(**base, **{**SMTP_ENV, "SMTP_TIMEOUT": "0"})
+    assert invalid_timeout.returncode != 0
+    assert "SMTP_TIMEOUT must be positive" in invalid_timeout.stderr
+
+
+def test_smtp_tls_and_ssl_are_mutually_exclusive_without_exposing_credentials():
+    secret = "credential-must-never-appear"
+    result = run_settings_probe(
+        COMMERCE_ENV="development",
+        DJANGO_SECRET_KEY="django-insecure-development-only-not-for-production",
+        EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
+        **{
+            **SMTP_ENV,
+            "SMTP_PASSWORD": secret,
+            "SMTP_USE_TLS": "true",
+            "SMTP_USE_SSL": "true",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "cannot both be enabled" in result.stderr
+    assert secret not in result.stdout
+    assert secret not in result.stderr
 
 
 def test_development_requires_explicit_secret_key():
@@ -163,6 +247,7 @@ def test_production_requires_database_configuration():
         AUTH_FRONTEND_BASE_URL="https://commerce.example",
         EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
         DEFAULT_FROM_EMAIL="Commerce Architect <noreply@commerce.example>",
+        **SMTP_ENV,
     )
 
     assert result.returncode != 0
@@ -203,6 +288,7 @@ def test_production_rejects_known_development_database_password():
         AUTH_FRONTEND_BASE_URL="https://commerce.example",
         EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
         DEFAULT_FROM_EMAIL="Commerce Architect <noreply@commerce.example>",
+        **SMTP_ENV,
     )
 
     assert result.returncode != 0
@@ -224,6 +310,7 @@ def test_explicit_production_enables_secure_defaults_and_proxy_support():
         AUTH_FRONTEND_BASE_URL="https://commerce.example",
         EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
         DEFAULT_FROM_EMAIL="Commerce Architect <noreply@commerce.example>",
+        **SMTP_ENV,
     )
 
     assert result.returncode == 0, result.stderr
@@ -257,6 +344,7 @@ def test_production_rejects_unsafe_auth_email_configuration():
         "DATABASE_USER": "commerce",
         "DATABASE_PASSWORD": "not-a-real-production-password",
         "DEFAULT_FROM_EMAIL": "Commerce Architect <noreply@commerce.example>",
+        **SMTP_ENV,
     }
 
     missing_url = run_settings_probe(

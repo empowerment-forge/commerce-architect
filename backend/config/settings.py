@@ -157,10 +157,54 @@ EMAIL_BACKEND_NAME = os.environ.get(
         else ""
     ),
 ).strip()
+SMTP_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL",
     "Commerce Architect <noreply@localhost>" if not IS_PRODUCTION else "",
 ).strip()
+
+MAILER_OPTIONS = {}
+if EMAIL_BACKEND_NAME == SMTP_BACKEND:
+    smtp_host = os.environ.get("SMTP_HOST", "").strip()
+    smtp_username = os.environ.get("SMTP_USERNAME", "").strip()
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
+    smtp_port = env_int("SMTP_PORT", 587)
+    smtp_use_tls = env_bool("SMTP_USE_TLS", True)
+    smtp_use_ssl = env_bool("SMTP_USE_SSL", False)
+    smtp_timeout = env_int("SMTP_TIMEOUT", 10)
+
+    missing_smtp_variables = [
+        name
+        for name, value in (
+            ("SMTP_HOST", smtp_host),
+            ("SMTP_USERNAME", smtp_username),
+            ("SMTP_PASSWORD", smtp_password),
+        )
+        if not value
+    ]
+    if missing_smtp_variables:
+        raise ImproperlyConfigured(
+            "SMTP email requires configuration: "
+            + ", ".join(missing_smtp_variables)
+        )
+    if not 1 <= smtp_port <= 65535:
+        raise ImproperlyConfigured("SMTP_PORT must be between 1 and 65535.")
+    if smtp_use_tls and smtp_use_ssl:
+        raise ImproperlyConfigured(
+            "SMTP_USE_TLS and SMTP_USE_SSL cannot both be enabled."
+        )
+    if smtp_timeout <= 0:
+        raise ImproperlyConfigured("SMTP_TIMEOUT must be positive.")
+
+    MAILER_OPTIONS = {
+        "host": smtp_host,
+        "port": smtp_port,
+        "username": smtp_username,
+        "password": smtp_password,
+        "use_tls": smtp_use_tls,
+        "use_ssl": smtp_use_ssl,
+        "timeout": smtp_timeout,
+    }
 
 if AUTH_EMAIL_VERIFICATION_TTL_SECONDS <= 0:
     raise ImproperlyConfigured("AUTH_EMAIL_VERIFICATION_TTL_SECONDS must be positive.")
@@ -195,6 +239,7 @@ if IS_PRODUCTION:
 MAILERS = {
     "default": {
         "BACKEND": EMAIL_BACKEND_NAME,
+        "OPTIONS": MAILER_OPTIONS,
     }
 }
 

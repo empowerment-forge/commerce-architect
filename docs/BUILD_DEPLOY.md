@@ -128,6 +128,26 @@ and non-negative resend-cooldown values, an absolute HTTPS
 settings. Provider credentials remain runtime secrets and must never use a
 `VITE_` prefix.
 
+For Railway SMTP delivery, configure service variables—not repository files—with:
+
+```text
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=587
+SMTP_USERNAME=resend
+SMTP_PASSWORD=<Railway secret variable>
+SMTP_USE_TLS=true
+SMTP_USE_SSL=false
+SMTP_TIMEOUT=10
+DEFAULT_FROM_EMAIL=Commerce Architect <accounts@empowerment-forge.com>
+AUTH_FRONTEND_BASE_URL=https://dev-commerce.empowerment-forge.com
+```
+
+Resend is the tested example; any standards-compatible SMTP provider can use
+the same variables. Never commit or print the provider credential. Django 6.1
+receives these values through `MAILERS["default"]["OPTIONS"]`; deprecated
+`EMAIL_HOST`/`EMAIL_PORT` settings are not used.
+
 The backend's Railway-generated public domain currently remains available as a
 temporary operational endpoint. Whether to remove it or retain it in restricted
 form is unresolved; do not remove it without evaluating health and emergency

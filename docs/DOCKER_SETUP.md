@@ -150,6 +150,13 @@ production.
 | `AUTH_FRONTEND_BASE_URL` | `http://localhost:5173` | Required absolute HTTPS URL in production |
 | `EMAIL_BACKEND` | First-party readable console backend | Required delivery-capable backend in production |
 | `DEFAULT_FROM_EMAIL` | Local non-delivery sender | Required non-local sender in production |
+| `SMTP_HOST` | Unused by console mode | Required when SMTP is selected |
+| `SMTP_PORT` | `587` | Integer from 1 through 65535 |
+| `SMTP_USERNAME` | Unused by console mode | Required when SMTP is selected |
+| `SMTP_PASSWORD` | Unused by console mode | Required secret when SMTP is selected |
+| `SMTP_USE_TLS` | `true` | Explicit TLS; mutually exclusive with SSL |
+| `SMTP_USE_SSL` | `false` | Implicit TLS; mutually exclusive with TLS |
+| `SMTP_TIMEOUT` | `10` | Positive timeout in seconds |
 
 Production fails startup if its Django secret is absent, shorter than 50
 characters, begins with `django-insecure-`, or contains `changeme`. It also
@@ -157,9 +164,12 @@ fails if debug is enabled, deployment hosts are absent, only development hosts
 are supplied, database settings are missing, or a known development database
 password is reused.
 
-For local email verification, the first-party console backend prints the plain
-message body without MIME transfer encoding. Follow the `web` logs after
-registration:
+### Local email modes
+
+The default local console mode requires no external provider. Keep
+`EMAIL_BACKEND=accounts.mail.ReadableConsoleEmailBackend`; the first-party
+backend prints the plain message body without MIME transfer encoding. Follow
+the `web` logs after registration:
 
 ```bash
 podman-compose logs -f web
@@ -167,8 +177,18 @@ podman-compose logs -f web
 ```
 
 Open the printed `http://localhost:5173/verify-email?...` link in the browser.
-No external email provider is needed. Production rejects missing/insecure
-frontend URL, console/dummy/in-memory email backends, and a local sender.
+No external email provider is needed.
+
+For real SMTP UAT, copy `.env.example` to the ignored `.env`, select
+`django.core.mail.backends.smtp.EmailBackend`, and set the standard `SMTP_*`
+variables plus the verified `DEFAULT_FROM_EMAIL`. Resend is the currently tested
+example (`smtp.resend.com`, port `587`, username `resend`, TLS enabled), but the
+application has no Resend SDK or provider-specific integration. Put the actual
+SMTP password only in `.env`, then restart the web service. TLS and SSL cannot
+both be enabled.
+
+Production rejects missing/insecure frontend URL, console/dummy/in-memory email
+backends, a local sender, incomplete SMTP credentials, and invalid SMTP options.
 
 ## HTTPS and Proxy Variables
 
