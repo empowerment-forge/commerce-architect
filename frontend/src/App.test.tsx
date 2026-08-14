@@ -22,6 +22,16 @@ function mockApi(routes: Record<string, () => Response>) {
   });
 }
 
+async function openAndFillRegistration() {
+  const user = userEvent.setup();
+  await screen.findByRole("heading", { name: "Welcome back" });
+  await user.click(screen.getByRole("button", { name: "Show register form" }));
+  await user.type(screen.getByLabelText("Username"), "alice");
+  await user.type(screen.getByLabelText("Email"), "alice@example.com");
+  await user.type(screen.getByLabelText("Password"), "SecurePass123!");
+  return user;
+}
+
 describe("App authentication flow", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -63,21 +73,98 @@ describe("App authentication flow", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
   });
 
-  it("shows field-oriented registration errors", async () => {
+  it("shows a password validation error at the password field", async () => {
     mockApi({
       "/api/auth/refresh/": () => response({}, false, 401),
-      "/api/auth/register/": () => response({ email: ["A user with that email already exists."] }, false, 400),
+      "/api/auth/register/": () => response({
+        password: ["The password is too similar to the username."],
+      }, false, 400),
     });
-    const user = userEvent.setup();
     render(<App />);
-    await screen.findByRole("heading", { name: "Welcome back" });
-    await user.click(screen.getByRole("button", { name: "Show register form" }));
-    await user.type(screen.getByLabelText("Username"), "alice");
-    await user.type(screen.getByLabelText("Email"), "alice@example.com");
-    await user.type(screen.getByLabelText("Password"), "SecurePass123!");
+    const user = await openAndFillRegistration();
     await user.click(screen.getByRole("button", { name: "Register" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
+    const password = screen.getByLabelText("Password");
+    await waitFor(() => expect(password).toHaveAccessibleDescription("The password is too similar to the username."));
+    expect(password).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("shows username and email errors at their corresponding fields", async () => {
+    mockApi({
+      "/api/auth/refresh/": () => response({}, false, 401),
+      "/api/auth/register/": () => response({
+        username: ["A user with that username already exists."],
+        email: ["A user with that email already exists."],
+      }, false, 400),
+    });
+    render(<App />);
+    const user = await openAndFillRegistration();
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Username")).toHaveAccessibleDescription("A user with that username already exists.");
+      expect(screen.getByLabelText("Email")).toHaveAccessibleDescription("A user with that email already exists.");
+    });
+  });
+
+  it("shows multiple password validation messages", async () => {
+    mockApi({
+      "/api/auth/refresh/": () => response({}, false, 401),
+      "/api/auth/register/": () => response({
+        password: [
+          "The password is too similar to the username.",
+          "This password is too common.",
+        ],
+      }, false, 400),
+    });
+    render(<App />);
+    const user = await openAndFillRegistration();
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    const password = screen.getByLabelText("Password");
+    await waitFor(() => {
+      expect(password).toHaveAccessibleDescription("The password is too similar to the username. This password is too common.");
+    });
+  });
+
+  it("uses a generic global registration error for a network failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/auth/refresh/") return response({}, false, 401);
+      throw new TypeError("network unavailable");
+    });
+    render(<App />);
+    const user = await openAndFillRegistration();
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Registration failed. Please try again.");
+  });
+
+  it("clears failed registration feedback after a corrected successful submission", async () => {
+    let attempts = 0;
+    mockApi({
+      "/api/auth/refresh/": () => response({}, false, 401),
+      "/api/auth/register/": () => {
+        attempts += 1;
+        return attempts === 1
+          ? response({}, false, 500)
+          : response({
+              id: 1,
+              username: "alice",
+              email: "alice@example.com",
+              email_verified: false,
+              detail: "Registration succeeded. Check your email to verify the account.",
+            }, true, 201);
+      },
+    });
+    render(<App />);
+    const user = await openAndFillRegistration();
+    await user.click(screen.getByRole("button", { name: "Register" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Registration failed. Please try again.");
+
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Registration succeeded");
+    expect(screen.queryByText("Registration failed. Please try again.")).not.toBeInTheDocument();
   });
 
   it("shows the verified-email enforcement error on login", async () => {

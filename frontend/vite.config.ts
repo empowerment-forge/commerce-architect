@@ -1,6 +1,12 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
+const proxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8000'
+const djangoProxy = {
+  target: proxyTarget,
+  changeOrigin: false,
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -13,10 +19,9 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     proxy: {
-      '/api': {
-        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8000',
-        changeOrigin: false,
-      },
+      '/api': djangoProxy,
+      '/admin': djangoProxy,
+      '/static': djangoProxy,
     },
   },
 })

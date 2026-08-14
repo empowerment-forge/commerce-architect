@@ -30,18 +30,57 @@ type AuthPanelProps = {
   onLogin: (access: string, user: AuthUser) => void;
 };
 
+type RegistrationField = "username" | "email" | "password";
+type RegistrationFieldErrors = Partial<Record<RegistrationField, string[]>>;
+
+const registrationFields: RegistrationField[] = ["username", "email", "password"];
+
+function registrationErrors(error: ApiError): RegistrationFieldErrors {
+  return Object.fromEntries(
+    registrationFields.flatMap((field) => {
+      const value = error.body[field];
+      const messages = Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [];
+      return messages.length ? [[field, messages]] : [];
+    }),
+  );
+}
+
+function registrationGlobalError(error: ApiError): string {
+  if (typeof error.body.detail === "string") return error.body.detail;
+  const nonFieldErrors = error.body.non_field_errors;
+  if (Array.isArray(nonFieldErrors)) {
+    const messages = nonFieldErrors.filter((item): item is string => typeof item === "string");
+    if (messages.length) return messages.join(" ");
+  }
+  return "Registration failed. Please try again.";
+}
+
+function FieldErrors({ field, errors }: { field: RegistrationField; errors?: string[] }) {
+  if (!errors?.length) return null;
+  return (
+    <ul className="mt-1 list-disc pl-5 text-sm font-normal text-red-700" id={`${field}-errors`} role="alert">
+      {errors.map((message, index) => <li key={`${field}-${index}`}>{message}</li>)}
+    </ul>
+  );
+}
+
 function AuthPanel({ onLogin }: AuthPanelProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<RegistrationFieldErrors>({});
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setBusy(true);
     setError(null);
     setMessage(null);
-    const data = new FormData(event.currentTarget);
+    setFieldErrors({});
+    const data = new FormData(form);
     try {
       if (mode === "register") {
         const result = await registerAccount(
@@ -49,8 +88,10 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
           String(data.get("email")),
           String(data.get("password")),
         );
+        setError(null);
+        setFieldErrors({});
         setMessage(result.detail);
-        event.currentTarget.reset();
+        form.reset();
       } else {
         const result = await loginAccount(
           String(data.get("username")),
@@ -60,7 +101,15 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
         onLogin(result.access, user);
       }
     } catch (requestError) {
-      setError(errorMessage(requestError, `${mode === "login" ? "Login" : "Registration"} failed. Please try again.`));
+      setMessage(null);
+      if (mode === "register" && requestError instanceof ApiError) {
+        const nextFieldErrors = registrationErrors(requestError);
+        setFieldErrors(nextFieldErrors);
+        const hasFieldErrors = Object.keys(nextFieldErrors).length > 0;
+        setError(hasFieldErrors ? null : registrationGlobalError(requestError));
+      } else {
+        setError(errorMessage(requestError, `${mode === "login" ? "Login" : "Registration"} failed. Please try again.`));
+      }
     } finally {
       setBusy(false);
     }
@@ -74,7 +123,7 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
             aria-label={`Show ${item} form`}
             className={`rounded-md px-4 py-2 text-sm font-medium ${mode === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
             key={item}
-            onClick={() => { setMode(item); setError(null); setMessage(null); }}
+            onClick={() => { setMode(item); setError(null); setMessage(null); setFieldErrors({}); }}
             type="button"
           >
             {item === "login" ? "Login" : "Register"}
@@ -83,20 +132,23 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
       </div>
       <h2 className="mt-5 text-xl font-semibold">{mode === "login" ? "Welcome back" : "Create account"}</h2>
       <form className="mt-4 space-y-4" onSubmit={submit}>
-        <label className="block text-sm font-medium">
-          Username
-          <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="username" required />
-        </label>
+        <div>
+          <label className="block text-sm font-medium" htmlFor="auth-username">Username</label>
+          <input aria-describedby={fieldErrors.username ? "username-errors" : undefined} aria-invalid={Boolean(fieldErrors.username)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-username" name="username" required />
+          {mode === "register" && <FieldErrors errors={fieldErrors.username} field="username" />}
+        </div>
         {mode === "register" && (
-          <label className="block text-sm font-medium">
-            Email
-            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="email" required type="email" />
-          </label>
+          <div>
+            <label className="block text-sm font-medium" htmlFor="auth-email">Email</label>
+            <input aria-describedby={fieldErrors.email ? "email-errors" : undefined} aria-invalid={Boolean(fieldErrors.email)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-email" name="email" required type="email" />
+            <FieldErrors errors={fieldErrors.email} field="email" />
+          </div>
         )}
-        <label className="block text-sm font-medium">
-          Password
-          <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="password" required type="password" />
-        </label>
+        <div>
+          <label className="block text-sm font-medium" htmlFor="auth-password">Password</label>
+          <input aria-describedby={fieldErrors.password ? "password-errors" : undefined} aria-invalid={Boolean(fieldErrors.password)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-password" name="password" required type="password" />
+          {mode === "register" && <FieldErrors errors={fieldErrors.password} field="password" />}
+        </div>
         <button className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={busy} type="submit">
           {busy ? "Working…" : mode === "login" ? "Login" : "Register"}
         </button>

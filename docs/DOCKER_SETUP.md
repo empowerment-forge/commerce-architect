@@ -412,8 +412,9 @@ After resetting the volume, apply migrations again before using the application.
     source bind mount lets Vite observe host edits and provide hot module
     replacement without rebuilding the image.
 -   Inside Compose, `VITE_API_PROXY_TARGET=http://web:8000` directs Vite's
-    `/api` proxy to Django over the Compose network. Native host Vite development
-    still defaults to `http://localhost:8000` when that variable is unset.
+    `/api`, `/admin`, and `/static` proxies to Django over the Compose network.
+    Native host Vite development still defaults to `http://localhost:8000` when
+    that variable is unset.
 -   PostgreSQL listens on port `5432` and persists data in `postgres_data`.
 -   `DATABASE_HOST=db` is correct inside the Compose network; it should not be
     replaced with `localhost` in the container configuration.

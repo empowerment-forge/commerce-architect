@@ -8,8 +8,8 @@ import { createServer as createViteServer } from "vite";
 
 const configFile = fileURLToPath(new URL("./vite.config.ts", import.meta.url));
 
-describe("Vite API proxy", () => {
-  it("forwards /api/products/ to the configured backend", async () => {
+describe("Vite Django proxies", () => {
+  it("forwards API, admin, and static paths to the configured backend", async () => {
     const requestedPaths: string[] = [];
     const backend = createHttpServer((request, response) => {
       requestedPaths.push(request.url ?? "");
@@ -32,14 +32,16 @@ describe("Vite API proxy", () => {
     try {
       await vite.listen();
       const viteAddress = vite.httpServer?.address() as AddressInfo;
-      const response = await fetch(
-        `http://127.0.0.1:${viteAddress.port}/api/products/`,
-      );
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toContain("application/json");
-      expect(await response.json()).toEqual([{ id: 1, name: "Test product" }]);
-      expect(requestedPaths).toEqual(["/api/products/"]);
+      for (const path of ["/api/products/", "/admin/", "/static/admin/css/base.css"]) {
+        const response = await fetch(`http://127.0.0.1:${viteAddress.port}${path}`);
+        expect(response.status).toBe(200);
+        expect(response.headers.get("content-type")).toContain("application/json");
+      }
+      expect(requestedPaths).toEqual([
+        "/api/products/",
+        "/admin/",
+        "/static/admin/css/base.css",
+      ]);
     } finally {
       await vite.close();
       await new Promise<void>((resolve, reject) => {
