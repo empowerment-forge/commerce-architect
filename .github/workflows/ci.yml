@@ -183,6 +183,13 @@ jobs:
             --env AUTH_FRONTEND_BASE_URL=https://commerce.example
             --env EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
             --env "DEFAULT_FROM_EMAIL=Commerce Architect <noreply@commerce.example>"
+            --env SMTP_HOST=smtp.example.com
+            --env SMTP_PORT=587
+            --env SMTP_USERNAME=ci-smtp-user
+            --env SMTP_PASSWORD=ci-only-smtp-password
+            --env SMTP_USE_TLS=true
+            --env SMTP_USE_SSL=false
+            --env SMTP_TIMEOUT=10
             --env DATABASE_HOST=commerce-backend-postgres
             --env DATABASE_NAME=commerce_ci
             --env DATABASE_USER=commerce_ci
