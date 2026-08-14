@@ -71,6 +71,8 @@ describe("App authentication flow", () => {
     await user.click(screen.getByRole("button", { name: "Register" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
+    expect(screen.getByLabelText("Email address")).toHaveValue("alice@example.com");
+    expect(screen.getByRole("button", { name: "Resend verification email" })).toBeInTheDocument();
   });
 
   it("shows a password validation error at the password field", async () => {
@@ -181,6 +183,7 @@ describe("App authentication flow", () => {
     await user.click(screen.getByRole("button", { name: "Login" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Verify your current email");
+    expect(screen.getByRole("button", { name: "Resend verification email" })).toBeInTheDocument();
   });
 
   it("shows a useful bad-credentials error", async () => {

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { VerificationPage } from "./VerificationPage";
 
@@ -38,6 +39,24 @@ describe("VerificationPage", () => {
     render(<VerificationPage />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("invalid or expired");
+    expect(screen.getByRole("button", { name: "Resend verification email" })).toBeInTheDocument();
+  });
+
+  it("resends from an invalid-link result", async () => {
+    window.history.replaceState({}, "", "/verify-email?uid=user-id&token=bad");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(response({ code: "invalid_or_expired_token" }, false, 400))
+      .mockResolvedValueOnce(response({
+        detail: "If an eligible unverified account exists, a verification email will be sent.",
+      }, true, 202));
+    const user = userEvent.setup();
+    render(<VerificationPage />);
+    await screen.findByText(/invalid or expired/i);
+
+    await user.type(screen.getByLabelText("Email address"), "alice@example.com");
+    await user.click(screen.getByRole("button", { name: "Resend verification email" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("eligible unverified account");
   });
 
   it("shows an already-verified result as success", async () => {

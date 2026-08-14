@@ -11,6 +11,7 @@ import {
 } from "./api/auth";
 import type { AuthUser } from "./api/auth";
 import { ApiError } from "./api/client";
+import { ResendVerificationForm } from "./components/ResendVerificationForm";
 import { ProductListPage } from "./pages/ProductListPage";
 import { VerificationPage } from "./pages/VerificationPage";
 
@@ -71,6 +72,7 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<RegistrationFieldErrors>({});
+  const [resendEmail, setResendEmail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -80,6 +82,7 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
     setError(null);
     setMessage(null);
     setFieldErrors({});
+    setResendEmail(null);
     const data = new FormData(form);
     try {
       if (mode === "register") {
@@ -91,6 +94,7 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
         setError(null);
         setFieldErrors({});
         setMessage(result.detail);
+        setResendEmail(result.email);
         form.reset();
       } else {
         const result = await loginAccount(
@@ -108,6 +112,13 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
         const hasFieldErrors = Object.keys(nextFieldErrors).length > 0;
         setError(hasFieldErrors ? null : registrationGlobalError(requestError));
       } else {
+        if (
+          mode === "login"
+          && requestError instanceof ApiError
+          && requestError.body.code === "email_not_verified"
+        ) {
+          setResendEmail("");
+        }
         setError(errorMessage(requestError, `${mode === "login" ? "Login" : "Registration"} failed. Please try again.`));
       }
     } finally {
@@ -123,7 +134,7 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
             aria-label={`Show ${item} form`}
             className={`rounded-md px-4 py-2 text-sm font-medium ${mode === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
             key={item}
-            onClick={() => { setMode(item); setError(null); setMessage(null); setFieldErrors({}); }}
+            onClick={() => { setMode(item); setError(null); setMessage(null); setFieldErrors({}); setResendEmail(null); }}
             type="button"
           >
             {item === "login" ? "Login" : "Register"}
@@ -155,6 +166,7 @@ function AuthPanel({ onLogin }: AuthPanelProps) {
       </form>
       {message && <p className="mt-4 text-sm text-emerald-700" role="status">{message}</p>}
       {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
+      {resendEmail !== null && <ResendVerificationForm initialEmail={resendEmail} />}
     </section>
   );
 }

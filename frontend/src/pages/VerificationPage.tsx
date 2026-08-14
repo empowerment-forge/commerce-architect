@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../api/client";
 import { verifyEmail } from "../api/auth";
+import { ResendVerificationForm } from "../components/ResendVerificationForm";
 
 type VerificationState =
   | { status: "pending" }
   | { status: "success"; message: string; email: string }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; canResend: boolean };
 
 export function VerificationPage() {
   const [credentials] = useState(() => {
@@ -16,7 +17,7 @@ export function VerificationPage() {
   const [state, setState] = useState<VerificationState>(
     credentials.uid && credentials.token
       ? { status: "pending" }
-      : { status: "error", message: "This verification link is incomplete." },
+      : { status: "error", message: "This verification link is incomplete.", canResend: true },
   );
   const started = useRef(false);
 
@@ -33,11 +34,11 @@ export function VerificationPage() {
         setState({ status: "success", message: result.detail, email: result.email });
       })
       .catch((error: unknown) => {
-        const message =
-          error instanceof ApiError && error.status === 400
-            ? "This verification link is invalid or expired. Request a new email."
-            : "Verification is unavailable right now. Please try again.";
-        setState({ status: "error", message });
+        const invalid = error instanceof ApiError && error.status === 400;
+        const message = invalid
+          ? "This verification link is invalid or expired. Request a new email."
+          : "Verification is unavailable right now. Please try again.";
+        setState({ status: "error", message, canResend: invalid });
       });
   }, [credentials]);
 
@@ -53,7 +54,10 @@ export function VerificationPage() {
           </div>
         )}
         {state.status === "error" && (
-          <p className="mt-4 text-red-700" role="alert">{state.message}</p>
+          <>
+            <p className="mt-4 text-red-700" role="alert">{state.message}</p>
+            {state.canResend && <ResendVerificationForm />}
+          </>
         )}
         <a className="mt-6 inline-block font-medium text-blue-700 underline" href="/">
           Return to login

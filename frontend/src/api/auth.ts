@@ -38,6 +38,13 @@ export function verifyEmail(uid: string, token: string) {
   });
 }
 
+export function resendVerification(email: string) {
+  return apiRequest<{ detail: string }>("/api/auth/resend-verification/", {
+    method: "POST",
+    body: { email },
+  });
+}
+
 export function loginAccount(username: string, password: string) {
   return apiRequest<{ access: string }>("/api/auth/token/", {
     method: "POST",
