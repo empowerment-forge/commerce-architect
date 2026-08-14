@@ -21,6 +21,6 @@ frontend, which removes token query parameters from history and explicitly POSTs
 them to the backend so mail-link scanners do not consume tokens through GET.
 
 Refresh cookies remain `HttpOnly`, `SameSite=Strict`, scoped to `/api/auth/`, and
-`Secure` outside local development. The browser and API are expected to remain
-same-origin. Cross-site authentication requires a separate CORS, CSRF, and
-cookie-policy review.
+`Secure` outside local development. The browser and API remain same-origin in
+the current Vite and Railway/NGINX topologies. Any cross-site authentication
+change requires a separate CORS, CSRF, and cookie-policy review.

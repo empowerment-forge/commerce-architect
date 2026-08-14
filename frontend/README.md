@@ -1,21 +1,45 @@
 # Commerce Architect Frontend
 
-The React, TypeScript, and Vite frontend exposes the product catalog and the
-minimal registration, verification, login, account, email-change, and logout
-journey.
+React, TypeScript, and Vite implement the product catalog and the minimal
+registration, verification, login, account, email-change, and logout journey.
 
-Run the full stack from the repository root with `podman-compose up --build -d`
-or `docker compose up --build -d`. For native frontend work:
+## Local development
+
+The preferred full-stack workflow is from the repository root:
+
+```bash
+podman-compose up --build -d
+# or: docker compose up --build -d
+```
+
+The `frontend` service runs Vite and proxies `/api` to Django. For native
+frontend work:
 
 ```bash
 npm ci
 npm run dev
-npm run test -- --run
+```
+
+Access tokens remain in React memory and refresh cookies remain HttpOnly. The
+local console email backend prints verification links in backend logs. See the
+[frontend authentication pattern](../docs/FRONTEND_AUTH_PATTERN.md).
+
+See [`../docs/UI_SETUP.md`](../docs/UI_SETUP.md) for proxy and troubleshooting
+details.
+
+## Checks
+
+```bash
+npm test -- --run
 npm run lint
 npm run build
 ```
 
-The browser calls same-origin `/api` routes. Access tokens remain in React memory
-and refresh cookies remain HttpOnly. Local verification links are printed in the
-backend logs. See [UI setup](../docs/UI_SETUP.md) and the
-[frontend authentication pattern](../docs/FRONTEND_AUTH_PATTERN.md).
+## Hosted runtime
+
+`frontend/Dockerfile` runs tests, lint, and the production build in Node 24,
+then copies only `dist` into NGINX. NGINX serves the SPA and proxies `/api/`,
+`/admin/`, and `/static/` to Django over Railway private networking. Browser API
+requests therefore remain same-origin. Requests for dotfiles are rejected
+instead of falling through to the SPA. See
+[`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).

@@ -232,7 +232,7 @@ metadata.
 - [x] Review Empowerment Forge owners, teams, roles, and repository-creation
   permissions.
 - [ ] Decide who receives admin, maintain, write, triage, and read access.
-- [x] Verify GitHub App and Codex authorization followed the transfer.
+- [x] Verify required repository automation authorization followed the transfer.
 - [x] Verify Actions and workflow permissions remain appropriate.
 - [ ] Record existing branch settings and rulesets for post-transfer review.
 - [x] Identify and update the local Git remote.
@@ -258,8 +258,7 @@ metadata.
 - [x] Update the local Git remote to
   `git@github.com:empowerment-forge/commerce-architect.git`.
 - [x] Confirm local Git/SSH fetch and push access.
-- [x] Confirm Codex and `gh` authentication can access the private repository.
-- [x] Confirm the ChatGPT GitHub connector can access the private repository.
+- [x] Confirm maintainer Git/SSH and GitHub CLI access to the private repository.
 - [x] Review organization ownership and repository administrator access.
 - [ ] Review branch settings and rulesets after transfer.
 - [x] Find and update links that incorrectly use the previous repository owner.
@@ -368,8 +367,9 @@ A disposable `pip-audit` scan of `backend/requirements.txt` found no known
 Python vulnerabilities. The requirements file is not fully deterministic:
 most direct dependencies are not pinned exactly and transitive versions are not
 locked. A repeatable Python audit and a reviewed lock or constraints strategy
-remain planned work. Weekly Dependabot checks now cover frontend npm, backend
-pip, and GitHub Actions dependencies.
+remain planned work. Weekly Dependabot checks target `develop` for frontend npm,
+backend pip, and GitHub Actions dependencies. Routine minor/patch updates are
+grouped per ecosystem; major updates require separate explicit review.
 
 ### Django Deployment Posture
 
@@ -443,8 +443,7 @@ where they have not yet been fully verified.
 - [x] Verify Git history, issues, pull requests, review history, and Actions.
 - [ ] Verify tags and releases.
 - [x] Update the local Git remote and verify Git/SSH access.
-- [x] Verify Codex and `gh` access.
-- [x] Verify ChatGPT GitHub connector access.
+- [x] Verify maintainer Git/SSH and GitHub CLI access.
 - [x] Verify organization ownership and administrator configuration.
 - [x] Verify `develop` is synchronized with `origin/develop`.
 - [ ] Reconcile and verify `main` for publication.
@@ -622,8 +621,7 @@ Run immediately after visibility changes:
 - [ ] Verify organization permissions.
 - [ ] Verify repository topics and description.
 - [ ] Verify external links and owner-specific URLs.
-- [ ] Verify Codex and `gh` access.
-- [ ] Verify ChatGPT GitHub connector access.
+- [ ] Verify required human maintainer and repository-automation access.
 - [ ] Re-run the primary clone, build, test, and documentation checks from a
   clean environment.
 

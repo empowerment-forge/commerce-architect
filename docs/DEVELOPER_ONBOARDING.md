@@ -79,7 +79,9 @@ PostgreSQL.
     development.
 
 The repository's Compose file supports both documented local runtimes. GitHub
-Actions CI uses Docker Compose.
+Actions builds and validates the production images directly and uses disposable
+PostgreSQL for backend integration tests. See
+[BUILD_DEPLOY.md](BUILD_DEPLOY.md) for the CI and hosted deployment contract.
 
 The checked-in Compose file is for local development, not production. A
 production deployment must set `COMMERCE_ENV=production` and provide its own

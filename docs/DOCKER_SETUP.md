@@ -2,13 +2,15 @@
 
 ## Purpose
 
-This document explains how to run the Commerce Architect PostgreSQL, Django, and
+This **local-development-only** document explains how to run the Commerce Architect PostgreSQL, Django, and
 React/Vite development services locally with either Podman Compose or Docker
 Compose. The checked-in `docker-compose.yml` is compatible with both workflows;
 use the container runtime that fits your development environment.
 
-GitHub Actions CI currently uses Docker Compose. Local Linux development can use
-Podman and Podman Compose without changing the Compose file.
+Hosted environments and CI do not use this Compose topology. See
+[BUILD_DEPLOY.md](BUILD_DEPLOY.md) and
+[ENVIRONMENT_PROVISIONING.md](ENVIRONMENT_PROVISIONING.md). Local Linux
+development can use Podman and Podman Compose without changing the Compose file.
 
 ------------------------------------------------------------------------
 
@@ -421,12 +423,9 @@ After resetting the volume, apply migrations again before using the application.
     dependency changes are synchronized from `frontend/package-lock.json` by
     `npm ci` at container startup. Restarting `frontend` is sufficient after a
     lockfile change; deleting `frontend_node_modules` is not normally necessary.
--   This container runs the Vite development server only. A future production
-    deployment may build the React application and publish its static assets to
-    dedicated frontend or static hosting instead. Likewise, local containerized
-    PostgreSQL does not require production to use a PostgreSQL container; a
-    managed PostgreSQL service remains a valid future choice. Production hosting
-    is intentionally undecided.
--   GitHub Actions runs frontend tests with its Node 24 setup, then builds and
-    starts only `web` and `db` for backend tests. It does not duplicate frontend
-    dependency installation or tests in the Compose frontend service.
+-   This container runs the Vite development server only. Hosted development
+    uses the production frontend image, NGINX, and Railway-managed PostgreSQL as
+    documented in [ARCHITECTURE.md](ARCHITECTURE.md). Local volumes and database
+    credentials never transfer to hosted environments.
+-   GitHub Actions validates the production frontend and backend images directly;
+    this Compose frontend remains a local developer convenience.

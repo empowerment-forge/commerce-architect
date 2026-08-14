@@ -106,8 +106,8 @@ the cookie's security and path rules.
 
 The current Vite development proxy makes browser `/api` requests same-origin,
 so no permissive CORS policy is required. `SameSite=Strict` is retained as a
-strong CSRF boundary for the refresh cookie. Production is expected to route
-the browser and API through an appropriate same-origin HTTPS boundary; a future
+strong CSRF boundary for the refresh cookie. Hosted development currently routes
+the browser and API through a same-origin HTTPS boundary; any future
 separate-origin or cross-site deployment requires explicit CORS and CSRF review
 rather than weakening the cookie by default.
 
@@ -155,8 +155,8 @@ With Podman Compose, the local equivalent is:
 podman-compose exec -T web pytest
 ```
 
-GitHub Actions validates the production backend image against disposable
-PostgreSQL; Compose remains the local test workflow.
+GitHub Actions runs these tests against the validated production backend image
+with disposable PostgreSQL. Compose remains the supported local workflow.
 
 ## Deployment Topology and BFF Evolution
 

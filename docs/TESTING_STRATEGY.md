@@ -17,7 +17,7 @@ It covers:
 - React integration testing
 - End-to-end (E2E) testing
 - CI integration
-- Codex-driven test generation standards
+- Optional AI-assisted test-generation guidance
 
 This is the single source of truth for how we ensure quality.
 
@@ -45,11 +45,13 @@ We enforce the following principles:
 - Django TestClient
 - SimpleJWT auth tests
 
-All backend tests run inside Docker:
+Backend tests run locally inside the Compose web service:
 
 docker compose exec -T web pytest
 
-CI executes this automatically.
+CI instead executes pytest against the validated production backend image with
+disposable PostgreSQL, followed by Django checks, migration checks, a smoke
+test, and Trivy image scanning.
 
 ---
 
@@ -144,26 +146,17 @@ These tests use real Django + real frontend build.
 
 # 5. CI Integration
 
-Backend tests already run in CI:
+CI builds each production image once and validates that exact artifact. The
+frontend image runs locked installation, Vitest, ESLint, and the production
+build; its runtime smoke checks also verify SPA, proxy, and dotfile-rejection
+behavior. The backend image runs pytest against disposable PostgreSQL, Django
+checks, migrations, and runtime health checks. Trivy scans both images.
 
-- Build Docker
-- Start services
-- Run pytest
+Successful `develop` pushes publish and deploy the validated images by immutable
+digest. Pull requests and `main` pushes validate without deployment. See
+[BUILD_DEPLOY.md](BUILD_DEPLOY.md) for the canonical trigger matrix.
 
-Frontend tests will be added:
-
-Example CI additions:
-
-- name: Install frontend dependencies
-  run: npm ci --prefix frontend
-
-- name: Run frontend unit tests
-  run: npm run test --prefix frontend
-
-- name: Run E2E tests
-  run: npm run e2e --prefix frontend
-
-CI must fail if any layer fails.
+Browser E2E tests remain planned rather than current CI behavior.
 
 ---
 
@@ -180,7 +173,11 @@ Phase 2:
 
 ---
 
-# 7. Codex Prompt Template for Frontend Testing
+# 7. Optional AI Prompt Template for Frontend Testing
+
+AI assistance is optional tooling, not a prerequisite, test runner, or
+acceptance criterion. Developers must be able to execute and understand every
+test using the documented repository commands.
 
 Use the following prompt when generating frontend tests:
 

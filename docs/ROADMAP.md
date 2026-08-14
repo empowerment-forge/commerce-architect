@@ -66,7 +66,7 @@ and logout are connected through the React frontend.
 - Django
 - Django REST Framework
 - PostgreSQL
-- Containerized local development and CI environment
+- Containerized local development and production-image CI validation
 - Catalog/product API
 - Accounts/authentication API
 - SimpleJWT-based access/refresh lifecycle
@@ -84,13 +84,14 @@ and logout are connected through the React frontend.
 - API integration for products
 - Minimal authentication UI and in-memory session state
 
-## Current Priority: Production-Style Development Deployment
+## Current Priority: Hosted-Development Operational Readiness
 
-The current top development priority is to launch and operate Commerce
-Architect at [https://dev-commerce.empowerment-forge.com](https://dev-commerce.empowerment-forge.com).
-This is an internet-facing, production-style **non-production** environment on
-Railway. It must use HTTPS, non-production credentials, no real customer data,
-and real controls for security, deployment, recovery, and operations.
+Commerce Architect is deployed at
+[https://dev-commerce.empowerment-forge.com](https://dev-commerce.empowerment-forge.com)
+as an internet-facing, production-style **non-production** Railway environment.
+The current priority is making that working environment reproducible and
+recoverable while retaining HTTPS, non-production credentials, no real customer
+data, and hardened Django runtime settings.
 
 Additional commerce and business-domain development—including Orders,
 Inventory, Checkout, and Payments—is temporarily secondary. Priority returns
@@ -103,27 +104,22 @@ The authoritative architecture and implementation guide for this milestone is
 outcomes; GitHub issues and that guide should hold detailed implementation
 decisions and procedures.
 
-### Deployment Milestone
+### Deployment and operations milestone
 
-The milestone is complete only when the team has:
+The runtime topology, frontend/backend production artifacts, NGINX same-origin
+routing, persistent private PostgreSQL, custom domain, HTTPS, migrations,
+health gates, image validation/scanning, and digest deployments are complete.
 
-- Understood and documented the current runtime architecture.
-- Defined the frontend production artifact and serving topology.
-- Defined the backend production artifact/container and production application
-  server.
-- Defined the PostgreSQL deployment and persistence model.
-- Defined environment-specific configuration and secrets handling.
-- Prepared the Railway project and development environment.
-- Configured `dev-commerce.empowerment-forge.com` and mandatory HTTPS/TLS.
-- Established CI build gates and a controlled deployment pipeline.
-- Established a reviewed database migration procedure.
-- Established post-deployment health checks, frontend/API smoke tests, and
-  real-HTTPS authentication/JWT validation.
+The broader operational-readiness milestone remains in progress until the team
+has:
+
+- Independently verified the documented clean-environment provisioning procedure.
+- Completed post-deployment and real-HTTPS authentication checks.
 - Established application and database rollback procedures.
 - Established useful logging, health visibility, monitoring, and alerting
   without leaking sensitive data.
-- Established dependency scanning, static/security analysis, and
-  container/image scanning where applicable.
+- Completed remaining static/security and dynamic application gates beyond the
+  current dependency and container-image scanning.
 - Established OWASP-oriented application security testing and a repeatable
   penetration-testing process for the internet-facing environment.
 - Protected sensitive data in the database, logs, backups, and configuration.
@@ -167,15 +163,9 @@ The major incomplete areas are:
 - Production security configuration
 - Guest-to-account lifecycle
 
-For the current slice, retain Django's stock `User` and add accounts-owned email
+The implemented slice retains Django's stock `User` with accounts-owned email
 verification state. A custom-user migration is not justified now and would need
 a separate risk-managed plan if broader identity requirements later demand it.
-
-The broader account and authentication architecture remains under active
-assessment. That assessment includes whether django-allauth or another mature
-Django-native solution should provide portions of the account lifecycle. This
-roadmap does not decide whether the current SimpleJWT approach will be retained
-or replaced; that decision must follow the architectural assessment.
 
 ## Supporting Workstreams
 

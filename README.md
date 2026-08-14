@@ -21,10 +21,10 @@ the repository root.
 ## Current Status
 
 -   Django + DRF backend operational
--   PostgreSQL 16 running in a containerized local environment
+-   PostgreSQL 16 locally and persistent Railway PostgreSQL in hosted development
 -   React/Vite frontend with product and end-to-end authentication UI
 -   Podman-compatible local development through the shared Compose file
--   Docker Compose-based CI in GitHub Actions
+-   Production-image validation and immutable deployment in GitHub Actions
 -   Pytest backend tests and Vitest frontend tests
 
 ------------------------------------------------------------------------
@@ -95,17 +95,19 @@ Changes are not ready to merge until CI passes.
 
 # CI Pipeline (GitHub Actions)
 
-GitHub Actions CI uses Docker Compose with the same `docker-compose.yml` that is
-compatible with local Docker Compose and Podman Compose workflows.
+GitHub Actions builds the production frontend and backend images directly. It
+validates those exact images, scans them with Trivy, and runs backend integration
+tests against disposable PostgreSQL.
 
 The workflow:
 
 1.  Install locked frontend dependencies with Node.js 24
 2.  Run the Vitest frontend suite
-3.  Build and start the `db` and `web` Docker Compose services for backend
-    integration testing
-4.  Run pytest inside the `web` container
-5.  Tear down the services
+3.  Start disposable PostgreSQL and run pytest and Django checks against the
+    production backend image
+4.  Scan both validated images for fixed HIGH/CRITICAL findings
+5.  On successful pushes to `develop`, publish both images by commit SHA,
+    resolve their digests, and deploy those immutable digests to Railway
 
 This checks both frontend and backend behavior while retaining an
 OCI-container-based, portable local architecture.
@@ -162,7 +164,7 @@ Local containers: - Docker Compose - Podman Compose-compatible
 
 Testing: - pytest - pytest-django - Vitest - React Testing Library
 
-CI: - GitHub Actions - Docker Compose-based pipeline
+CI: - GitHub Actions - exact-image tests/scans - digest-based Railway deployment
 
 Future: - Stripe integration - Orders domain - Scheduling domain
 
@@ -204,13 +206,19 @@ development and the optional native Vite workflow.
     daily workflow
 -   [Docker and Podman setup](docs/DOCKER_SETUP.md) — local services,
     configuration, and checks
+-   [Current hosted architecture](docs/ARCHITECTURE.md) — canonical runtime
+    topology and system boundaries
 -   [Architecture record](docs/ARCHITECTURE_v1.2.md) — frozen Phase 1 design
-    context
+    context, superseded where current implementation differs
 -   [Platform philosophy](docs/PLATFORM_PHILOSOPHY.md) — enduring project and
     adoption principles
 -   [Product roadmap](docs/ROADMAP.md) — current implementation and next steps
--   [Build and deployment guide](docs/BUILD_DEPLOY.md) — intended Railway
-    deployment, security, recovery, and operational architecture
+-   [Build and deployment guide](docs/BUILD_DEPLOY.md) — current build and
+    normal deployment contract
+-   [Environment provisioning](docs/ENVIRONMENT_PROVISIONING.md) — repeatable
+    Railway environment bootstrap
+-   [Operations runbook](docs/OPERATIONS.md) — status, verification, recovery,
+    and credential procedures
 -   [Public-readiness roadmap](docs/COMMERCE_ARCHITECT_PUBLIC_ROADMAP.md) —
     publication checklist and remaining release actions
 -   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and
