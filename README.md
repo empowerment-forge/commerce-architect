@@ -22,7 +22,7 @@ the repository root.
 
 -   Django + DRF backend operational
 -   PostgreSQL 16 locally and persistent Railway PostgreSQL in hosted development
--   React/Vite frontend with a product-list UI
+-   React/Vite frontend with product and end-to-end authentication UI
 -   Podman-compatible local development through the shared Compose file
 -   Production-image validation and immutable deployment in GitHub Actions
 -   Pytest backend tests and Vitest frontend tests
@@ -219,6 +219,8 @@ development and the optional native Vite workflow.
     Railway environment bootstrap
 -   [Operations runbook](docs/OPERATIONS.md) — status, verification, recovery,
     and credential procedures
+-   [Registration and email-verification UAT](docs/uat-testing/UAT_REGISTRATION_VERIFICATION.md)
+    — repeatable manual acceptance checklist for the authentication slice
 -   [Public-readiness roadmap](docs/COMMERCE_ARCHITECT_PUBLIC_ROADMAP.md) —
     publication checklist and remaining release actions
 -   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and

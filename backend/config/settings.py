@@ -11,8 +11,10 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from email.utils import parseaddr
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -133,6 +135,113 @@ REFRESH_COOKIE_SECURE = IS_PRODUCTION
 REFRESH_COOKIE_HTTPONLY = True
 REFRESH_COOKIE_SAMESITE = "Strict"
 REFRESH_COOKIE_PATH = "/api/auth/"
+
+AUTH_REQUIRE_VERIFIED_EMAIL = env_bool("AUTH_REQUIRE_VERIFIED_EMAIL", False)
+AUTH_EMAIL_VERIFICATION_TTL_SECONDS = env_int(
+    "AUTH_EMAIL_VERIFICATION_TTL_SECONDS",
+    86400,
+)
+AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = env_int(
+    "AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS",
+    60,
+)
+AUTH_FRONTEND_BASE_URL = os.environ.get(
+    "AUTH_FRONTEND_BASE_URL",
+    "http://localhost:5173" if not IS_PRODUCTION else "",
+).strip().rstrip("/")
+EMAIL_BACKEND_NAME = os.environ.get(
+    "EMAIL_BACKEND",
+    (
+        "accounts.mail.ReadableConsoleEmailBackend"
+        if not IS_PRODUCTION
+        else ""
+    ),
+).strip()
+SMTP_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL",
+    "Commerce Architect <noreply@localhost>" if not IS_PRODUCTION else "",
+).strip()
+
+MAILER_OPTIONS = {}
+if EMAIL_BACKEND_NAME == SMTP_BACKEND:
+    smtp_host = os.environ.get("SMTP_HOST", "").strip()
+    smtp_username = os.environ.get("SMTP_USERNAME", "").strip()
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
+    smtp_port = env_int("SMTP_PORT", 587)
+    smtp_use_tls = env_bool("SMTP_USE_TLS", True)
+    smtp_use_ssl = env_bool("SMTP_USE_SSL", False)
+    smtp_timeout = env_int("SMTP_TIMEOUT", 10)
+
+    missing_smtp_variables = [
+        name
+        for name, value in (
+            ("SMTP_HOST", smtp_host),
+            ("SMTP_USERNAME", smtp_username),
+            ("SMTP_PASSWORD", smtp_password),
+        )
+        if not value
+    ]
+    if missing_smtp_variables:
+        raise ImproperlyConfigured(
+            "SMTP email requires configuration: "
+            + ", ".join(missing_smtp_variables)
+        )
+    if not 1 <= smtp_port <= 65535:
+        raise ImproperlyConfigured("SMTP_PORT must be between 1 and 65535.")
+    if smtp_use_tls and smtp_use_ssl:
+        raise ImproperlyConfigured(
+            "SMTP_USE_TLS and SMTP_USE_SSL cannot both be enabled."
+        )
+    if smtp_timeout <= 0:
+        raise ImproperlyConfigured("SMTP_TIMEOUT must be positive.")
+
+    MAILER_OPTIONS = {
+        "host": smtp_host,
+        "port": smtp_port,
+        "username": smtp_username,
+        "password": smtp_password,
+        "use_tls": smtp_use_tls,
+        "use_ssl": smtp_use_ssl,
+        "timeout": smtp_timeout,
+    }
+
+if AUTH_EMAIL_VERIFICATION_TTL_SECONDS <= 0:
+    raise ImproperlyConfigured("AUTH_EMAIL_VERIFICATION_TTL_SECONDS must be positive.")
+if AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS < 0:
+    raise ImproperlyConfigured(
+        "AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS cannot be negative."
+    )
+
+if IS_PRODUCTION:
+    frontend_url = urlparse(AUTH_FRONTEND_BASE_URL)
+    unsafe_email_backends = {
+        "",
+        "django.core.mail.backends.console.EmailBackend",
+        "accounts.mail.ReadableConsoleEmailBackend",
+        "django.core.mail.backends.dummy.EmailBackend",
+        "django.core.mail.backends.locmem.EmailBackend",
+    }
+    if frontend_url.scheme != "https" or not frontend_url.netloc:
+        raise ImproperlyConfigured(
+            "Production requires AUTH_FRONTEND_BASE_URL to be an absolute HTTPS URL."
+        )
+    if EMAIL_BACKEND_NAME in unsafe_email_backends:
+        raise ImproperlyConfigured(
+            "Production requires an explicit delivery-capable EMAIL_BACKEND."
+        )
+    sender_address = parseaddr(DEFAULT_FROM_EMAIL)[1].casefold()
+    if not sender_address or sender_address.endswith("@localhost"):
+        raise ImproperlyConfigured(
+            "Production requires an explicit non-local DEFAULT_FROM_EMAIL."
+        )
+
+MAILERS = {
+    "default": {
+        "BACKEND": EMAIL_BACKEND_NAME,
+        "OPTIONS": MAILER_OPTIONS,
+    }
+}
 
 
 # Application definition

@@ -1,7 +1,7 @@
 # Commerce Architect Frontend
 
-React, TypeScript, and Vite implement the browser application. The current UI
-renders the product list through the same-origin `/api/products/` endpoint.
+React, TypeScript, and Vite implement the product catalog and the minimal
+registration, verification, login, account, email-change, and logout journey.
 
 ## Local development
 
@@ -19,6 +19,10 @@ frontend work:
 npm ci
 npm run dev
 ```
+
+Access tokens remain in React memory and refresh cookies remain HttpOnly. The
+local console email backend prints verification links in backend logs. See the
+[frontend authentication pattern](../docs/FRONTEND_AUTH_PATTERN.md).
 
 See [`../docs/UI_SETUP.md`](../docs/UI_SETUP.md) for proxy and troubleshooting
 details.

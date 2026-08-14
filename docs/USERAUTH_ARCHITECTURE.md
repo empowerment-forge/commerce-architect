@@ -31,7 +31,18 @@ Connect in a later phase.
 All current authentication routes are mounted under `/api/auth/`:
 
 -   `POST /api/auth/register/` creates a user and returns the new user's ID,
-    username, and email. It does not issue tokens.
+    username, normalized email, and unverified status. It validates the password,
+    sends a verification email, and does not issue tokens.
+-   `POST /api/auth/verify-email/` consumes an expiring, single-use token and
+    verifies the exact normalized address to which it was issued.
+-   `POST /api/auth/resend-verification/` returns an enumeration-resistant
+    response for known, unknown, verified, and cooldown-limited addresses and,
+    when eligible, rotates the token for the current address.
+-   `POST /api/auth/resend-verification-authenticated/` derives the address
+    from the authenticated user, applies the same cooldown and token rotation,
+    and explicitly reports sent, cooldown, verified, or delivery-failure states.
+-   `POST /api/auth/change-email/` requires JWT authentication, changes the
+    current address, invalidates prior verification/tokens, and sends a new link.
 -   `POST /api/auth/token/` validates credentials, returns an access token in
     JSON, and sets the refresh token cookie.
 -   `POST /api/auth/refresh/` reads the refresh token from its cookie, returns a
@@ -40,10 +51,37 @@ All current authentication routes are mounted under `/api/auth/`:
 -   `POST /api/auth/logout/` blacklists a valid refresh token when present and
     clears the refresh token cookie.
 -   `GET /api/auth/me/` requires JWT authentication and returns the authenticated
-    user's ID, username, and email.
+    user's ID, username, current email, and matching verification metadata.
 
 There is no `/api/auth/login/` endpoint. Login and initial token issuance use
 `POST /api/auth/token/`.
+
+## Email Verification
+
+The stock Django `User` remains the account model. `accounts.EmailVerification`
+owns a one-to-one verification record with a unique normalized email,
+`verified_at`, token digest/timestamps, and resend state. Raw random tokens are
+sent by email but never stored. Tokens expire, are single-use, and are valid only
+while bound to both the record and current normalized `User.email`.
+
+Changing email atomically clears `verified_at`, replaces the token, and requires
+the new address to verify independently. Old-address links cannot verify the
+account, and resend targets only the current address. Existing JWT sessions are
+not automatically revoked by an address change; `/me` immediately reports the
+new address as unverified.
+
+`AUTH_REQUIRE_VERIFIED_EMAIL` controls credential-login enforcement. It defaults
+to false for migration compatibility, while local Compose enables it for the
+complete manual journey. When enabled, correct credentials for an unverified
+current address return 403 without issuing a refresh cookie.
+
+Local development defaults to the readable console email backend. For real-mail
+UAT and production, the same `send_mail()` path can use any standards-compatible
+SMTP provider through Django 6.1 `MAILERS` options supplied by environment
+variables. Resend SMTP is the currently tested example; the application has no
+provider SDK dependency. Verification links open the frontend `/verify-email`
+page, which removes the raw query token from browser history and submits
+verification by POST.
 
 ## Access Token
 

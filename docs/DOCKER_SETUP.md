@@ -144,12 +144,51 @@ production.
 | `DATABASE_USER` | Derived from `POSTGRES_USER` | Required |
 | `DATABASE_PASSWORD` | Fixed local-only value | Required; known development values are rejected |
 | `DATABASE_PORT` | `5432` | Optional; defaults to `5432` |
+| `AUTH_REQUIRE_VERIFIED_EMAIL` | `true` in Compose to exercise the full flow | Explicit policy; defaults to `false` outside Compose for existing-account compatibility |
+| `AUTH_EMAIL_VERIFICATION_TTL_SECONDS` | `86400` | Positive token lifetime |
+| `AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS` | `60` | Non-negative resend cooldown |
+| `AUTH_FRONTEND_BASE_URL` | `http://localhost:5173` | Required absolute HTTPS URL in production |
+| `EMAIL_BACKEND` | First-party readable console backend | Required delivery-capable backend in production |
+| `DEFAULT_FROM_EMAIL` | Local non-delivery sender | Required non-local sender in production |
+| `SMTP_HOST` | Unused by console mode | Required when SMTP is selected |
+| `SMTP_PORT` | `587` | Integer from 1 through 65535 |
+| `SMTP_USERNAME` | Unused by console mode | Required when SMTP is selected |
+| `SMTP_PASSWORD` | Unused by console mode | Required secret when SMTP is selected |
+| `SMTP_USE_TLS` | `true` | Explicit TLS; mutually exclusive with SSL |
+| `SMTP_USE_SSL` | `false` | Implicit TLS; mutually exclusive with TLS |
+| `SMTP_TIMEOUT` | `10` | Positive timeout in seconds |
 
 Production fails startup if its Django secret is absent, shorter than 50
 characters, begins with `django-insecure-`, or contains `changeme`. It also
 fails if debug is enabled, deployment hosts are absent, only development hosts
 are supplied, database settings are missing, or a known development database
 password is reused.
+
+### Local email modes
+
+The default local console mode requires no external provider. Keep
+`EMAIL_BACKEND=accounts.mail.ReadableConsoleEmailBackend`; the first-party
+backend prints the plain message body without MIME transfer encoding. Follow
+the `web` logs after registration:
+
+```bash
+podman-compose logs -f web
+# or: docker compose logs -f web
+```
+
+Open the printed `http://localhost:5173/verify-email?...` link in the browser.
+No external email provider is needed.
+
+For real SMTP UAT, copy `.env.example` to the ignored `.env`, select
+`django.core.mail.backends.smtp.EmailBackend`, and set the standard `SMTP_*`
+variables plus the verified `DEFAULT_FROM_EMAIL`. Resend is the currently tested
+example (`smtp.resend.com`, port `587`, username `resend`, TLS enabled), but the
+application has no Resend SDK or provider-specific integration. Put the actual
+SMTP password only in `.env`, then restart the web service. TLS and SSL cannot
+both be enabled.
+
+Production rejects missing/insecure frontend URL, console/dummy/in-memory email
+backends, a local sender, incomplete SMTP credentials, and invalid SMTP options.
 
 ## HTTPS and Proxy Variables
 
@@ -395,8 +434,9 @@ After resetting the volume, apply migrations again before using the application.
     source bind mount lets Vite observe host edits and provide hot module
     replacement without rebuilding the image.
 -   Inside Compose, `VITE_API_PROXY_TARGET=http://web:8000` directs Vite's
-    `/api` proxy to Django over the Compose network. Native host Vite development
-    still defaults to `http://localhost:8000` when that variable is unset.
+    `/api`, `/admin`, and `/static` proxies to Django over the Compose network.
+    Native host Vite development still defaults to `http://localhost:8000` when
+    that variable is unset.
 -   PostgreSQL listens on port `5432` and persists data in `postgres_data`.
 -   `DATABASE_HOST=db` is correct inside the Compose network; it should not be
     replaced with `localhost` in the container configuration.

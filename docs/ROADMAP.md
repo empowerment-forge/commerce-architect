@@ -33,8 +33,8 @@ materially change. Do not use it as a duplicate backlog.
                            │
               ┌────────────┴────────────┐
               │                         │
-      Product UI works             Auth UI missing
-              │                         X
+      Product UI works             Auth UI works
+              │                         │
               │
       GET /api/products/
               │
@@ -46,6 +46,8 @@ materially change. Do not use it as a duplicate backlog.
    catalog                        accounts
       │                             │
 products API              register  ✅
+                          verify    ✅
+                          email change ✅
                           login     ✅
                           refresh   ✅
                           logout    ✅
@@ -53,9 +55,9 @@ products API              register  ✅
 ```
 
 The catalog has an end-to-end vertical slice that is visible in the browser.
-The authentication backend API exists and is tested, but the React frontend has
-not yet been connected to those endpoints. Authentication is therefore a
-backend capability today, not yet a complete user-facing experience.
+Authentication is now a complete first user-facing slice: registration, email
+verification, login, `/me`, email change/reverification, refresh restoration,
+and logout are connected through the React frontend.
 
 ## Current Major Capabilities
 
@@ -80,7 +82,7 @@ backend capability today, not yet a complete user-facing experience.
 - React Testing Library
 - Product listing UI
 - API integration for products
-- Authentication UI and state not yet implemented
+- Minimal authentication UI and in-memory session state
 
 ## Current Priority: Hosted-Development Operational Readiness
 
@@ -132,33 +134,39 @@ business domains.
 
 ## Existing Authentication Foundation
 
+**COMPLETE:** The independently testable registration, email verification and
+reverification, hybrid-JWT login/logout and `/me`, and minimal React UI slice is
+implemented. Its acceptance contract is
+[ai-prompts/auth-registration-verification.md](ai-prompts/auth-registration-verification.md).
+
 Authentication and the broader account lifecycle remain important platform
 work, especially where required to secure and validate the hosted environment.
 The existing backend foundation includes:
 
 - Registration endpoint
+- Email verification and enumeration-resistant resend
+- Authenticated email change and reverification
 - Login/token endpoint
 - Short-lived JWT access token
 - HttpOnly refresh-token cookie
 - Refresh rotation and blacklisting
 - Logout
 - Authenticated `/api/auth/me/` endpoint
+- Minimal frontend authentication/session UI
 
 The major incomplete areas are:
 
-- Password-policy hardening
-- Frontend authentication and session state
-- Automatic access-token refresh behavior
-- Email verification
+- Broader password/account policy hardening
+- Broader adoption of the implemented single-flight access-token refresh/retry
+  helper as future authenticated frontend operations are added
 - Password reset and recovery
 - MFA
 - Production security configuration
 - Guest-to-account lifecycle
 
-The next authentication slice must preserve the current hybrid SimpleJWT
-architecture while adding a minimal, evolvable registration and email
-verification experience. Broader provider or protocol changes remain separate
-future decisions.
+The implemented slice retains Django's stock `User` with accounts-owned email
+verification state. A custom-user migration is not justified now and would need
+a separate risk-managed plan if broader identity requirements later demand it.
 
 ## Supporting Workstreams
 
