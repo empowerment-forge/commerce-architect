@@ -219,6 +219,8 @@ development and the optional native Vite workflow.
     Railway environment bootstrap
 -   [Operations runbook](docs/OPERATIONS.md) — status, verification, recovery,
     and credential procedures
+-   [Registration and email-verification UAT](docs/uat-testing/UAT_REGISTRATION_VERIFICATION.md)
+    — repeatable manual acceptance checklist for the authentication slice
 -   [Public-readiness roadmap](docs/COMMERCE_ARCHITECT_PUBLIC_ROADMAP.md) —
     publication checklist and remaining release actions
 -   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and
