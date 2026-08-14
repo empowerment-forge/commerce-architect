@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Build frontend image once
         run: docker build --tag "${FRONTEND_IMAGE}:${GITHUB_SHA}" frontend
@@ -58,18 +58,39 @@ jobs:
             "${image}"
 
           for _ in {1..30}; do
-            if curl --fail --silent --show-error \
+            status=$(curl --silent --show-error \
+              --output /tmp/frontend-index.html \
+              --write-out '%{http_code}' \
               --header 'X-Forwarded-Proto: https' \
-              http://127.0.0.1:8080/ >/tmp/frontend-index.html; then
+              http://127.0.0.1:8080/) || status=000
+            if [ "${status}" = "200" ]; then
               break
             fi
             sleep 2
           done
+          test "${status}" = "200"
           grep --fixed-strings '<div id="root"></div>' /tmp/frontend-index.html
 
-          curl --fail --silent --show-error \
-            http://127.0.0.1:8080/client-side-route \
-            | grep --fixed-strings '<div id="root"></div>'
+          status=$(curl --silent --show-error \
+            --output /tmp/frontend-spa-route.html \
+            --write-out '%{http_code}' \
+            http://127.0.0.1:8080/client-side-route)
+          test "${status}" = "200"
+          grep --fixed-strings '<div id="root"></div>' \
+            /tmp/frontend-spa-route.html
+
+          for path in /.git/config /.env; do
+            status=$(curl --silent --show-error \
+              --output /tmp/frontend-sensitive-response \
+              --write-out '%{http_code}' \
+              "http://127.0.0.1:8080${path}")
+            test "${status}" = "404"
+            if grep --quiet --fixed-strings '<div id="root"></div>' \
+              /tmp/frontend-sensitive-response; then
+              echo "Sensitive path returned the React index: ${path}"
+              exit 1
+            fi
+          done
 
           curl --fail --silent --show-error \
             --header 'Host: dev-commerce.empowerment-forge.com' \
@@ -120,7 +141,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Build backend image once
         run: docker build --tag "${BACKEND_IMAGE}:${GITHUB_SHA}" backend
