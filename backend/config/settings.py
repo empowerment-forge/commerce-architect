@@ -11,8 +11,10 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from email.utils import parseaddr
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -133,6 +135,67 @@ REFRESH_COOKIE_SECURE = IS_PRODUCTION
 REFRESH_COOKIE_HTTPONLY = True
 REFRESH_COOKIE_SAMESITE = "Strict"
 REFRESH_COOKIE_PATH = "/api/auth/"
+
+AUTH_REQUIRE_VERIFIED_EMAIL = env_bool("AUTH_REQUIRE_VERIFIED_EMAIL", False)
+AUTH_EMAIL_VERIFICATION_TTL_SECONDS = env_int(
+    "AUTH_EMAIL_VERIFICATION_TTL_SECONDS",
+    86400,
+)
+AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = env_int(
+    "AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS",
+    60,
+)
+AUTH_FRONTEND_BASE_URL = os.environ.get(
+    "AUTH_FRONTEND_BASE_URL",
+    "http://localhost:5173" if not IS_PRODUCTION else "",
+).strip().rstrip("/")
+EMAIL_BACKEND_NAME = os.environ.get(
+    "EMAIL_BACKEND",
+    (
+        "django.core.mail.backends.console.EmailBackend"
+        if not IS_PRODUCTION
+        else ""
+    ),
+).strip()
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL",
+    "Commerce Architect <noreply@localhost>" if not IS_PRODUCTION else "",
+).strip()
+
+if AUTH_EMAIL_VERIFICATION_TTL_SECONDS <= 0:
+    raise ImproperlyConfigured("AUTH_EMAIL_VERIFICATION_TTL_SECONDS must be positive.")
+if AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS < 0:
+    raise ImproperlyConfigured(
+        "AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS cannot be negative."
+    )
+
+if IS_PRODUCTION:
+    frontend_url = urlparse(AUTH_FRONTEND_BASE_URL)
+    unsafe_email_backends = {
+        "",
+        "django.core.mail.backends.console.EmailBackend",
+        "django.core.mail.backends.dummy.EmailBackend",
+        "django.core.mail.backends.locmem.EmailBackend",
+    }
+    if frontend_url.scheme != "https" or not frontend_url.netloc:
+        raise ImproperlyConfigured(
+            "Production requires AUTH_FRONTEND_BASE_URL to be an absolute HTTPS URL."
+        )
+    if EMAIL_BACKEND_NAME in unsafe_email_backends:
+        raise ImproperlyConfigured(
+            "Production requires an explicit delivery-capable EMAIL_BACKEND."
+        )
+    sender_address = parseaddr(DEFAULT_FROM_EMAIL)[1].casefold()
+    if not sender_address or sender_address.endswith("@localhost"):
+        raise ImproperlyConfigured(
+            "Production requires an explicit non-local DEFAULT_FROM_EMAIL."
+        )
+
+MAILERS = {
+    "default": {
+        "BACKEND": EMAIL_BACKEND_NAME,
+    }
+}
 
 
 # Application definition

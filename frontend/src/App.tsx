@@ -1,7 +1,232 @@
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
+
+import {
+  changeEmail,
+  getCurrentUser,
+  loginAccount,
+  logoutAccount,
+  refreshAccessToken,
+  registerAccount,
+} from "./api/auth";
+import type { AuthUser } from "./api/auth";
+import { ApiError } from "./api/client";
 import { ProductListPage } from "./pages/ProductListPage";
+import { VerificationPage } from "./pages/VerificationPage";
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback;
+  if (error.body.code === "email_not_verified") {
+    return "Verify your current email address before logging in.";
+  }
+  if (error.body.detail) return error.body.detail;
+  const fieldError = Object.values(error.body).find(Array.isArray);
+  return Array.isArray(fieldError) && typeof fieldError[0] === "string"
+    ? fieldError[0]
+    : fallback;
+}
+
+type AuthPanelProps = {
+  onLogin: (access: string, user: AuthUser) => void;
+};
+
+function AuthPanel({ onLogin }: AuthPanelProps) {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    const data = new FormData(event.currentTarget);
+    try {
+      if (mode === "register") {
+        const result = await registerAccount(
+          String(data.get("username")),
+          String(data.get("email")),
+          String(data.get("password")),
+        );
+        setMessage(result.detail);
+        event.currentTarget.reset();
+      } else {
+        const result = await loginAccount(
+          String(data.get("username")),
+          String(data.get("password")),
+        );
+        const user = await getCurrentUser(result.access);
+        onLogin(result.access, user);
+      }
+    } catch (requestError) {
+      setError(errorMessage(requestError, `${mode === "login" ? "Login" : "Registration"} failed. Please try again.`));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex gap-2" aria-label="Authentication mode">
+        {(["login", "register"] as const).map((item) => (
+          <button
+            aria-label={`Show ${item} form`}
+            className={`rounded-md px-4 py-2 text-sm font-medium ${mode === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
+            key={item}
+            onClick={() => { setMode(item); setError(null); setMessage(null); }}
+            type="button"
+          >
+            {item === "login" ? "Login" : "Register"}
+          </button>
+        ))}
+      </div>
+      <h2 className="mt-5 text-xl font-semibold">{mode === "login" ? "Welcome back" : "Create account"}</h2>
+      <form className="mt-4 space-y-4" onSubmit={submit}>
+        <label className="block text-sm font-medium">
+          Username
+          <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="username" required />
+        </label>
+        {mode === "register" && (
+          <label className="block text-sm font-medium">
+            Email
+            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="email" required type="email" />
+          </label>
+        )}
+        <label className="block text-sm font-medium">
+          Password
+          <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="password" required type="password" />
+        </label>
+        <button className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={busy} type="submit">
+          {busy ? "Working…" : mode === "login" ? "Login" : "Register"}
+        </button>
+      </form>
+      {message && <p className="mt-4 text-sm text-emerald-700" role="status">{message}</p>}
+      {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+type AccountPanelProps = {
+  accessToken: string;
+  user: AuthUser;
+  onUserChange: (user: AuthUser) => void;
+  onLogout: () => void;
+};
+
+function AccountPanel({ accessToken, user, onUserChange, onLogout }: AccountPanelProps) {
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submitEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage(null);
+    setError(null);
+    const email = String(new FormData(event.currentTarget).get("email"));
+    try {
+      const result = await changeEmail(accessToken, email);
+      onUserChange({ ...user, email: result.email, email_verified: false, email_verified_at: null });
+      setMessage(result.detail);
+      event.currentTarget.reset();
+    } catch (requestError) {
+      if (
+        requestError instanceof ApiError
+        && requestError.body.code === "verification_delivery_failed"
+        && typeof requestError.body.email === "string"
+      ) {
+        onUserChange({
+          ...user,
+          email: requestError.body.email,
+          email_verified: false,
+          email_verified_at: null,
+        });
+      }
+      setError(errorMessage(requestError, "Unable to change email. Please try again."));
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold">Authenticated account</h2>
+          <p className="mt-2"><span className="font-medium">Username:</span> {user.username}</p>
+          <p><span className="font-medium">Email:</span> {user.email}</p>
+          <p>
+            <span className="font-medium">Verification:</span>{" "}
+            {user.email_verified ? "Verified" : "Not verified"}
+          </p>
+        </div>
+        <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium" onClick={onLogout} type="button">Logout</button>
+      </div>
+      <form className="mt-6 border-t border-slate-200 pt-5" onSubmit={submitEmail}>
+        <label className="block text-sm font-medium">
+          Change email
+          <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="email" required type="email" />
+        </label>
+        <button className="mt-3 rounded-md bg-blue-700 px-4 py-2 font-medium text-white" type="submit">Send verification to new email</button>
+      </form>
+      {message && <p className="mt-4 text-sm text-emerald-700" role="status">{message}</p>}
+      {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
+    </section>
+  );
+}
 
 function App() {
-  return <ProductListPage />;
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [restoring, setRestoring] = useState(true);
+  const refreshStarted = useRef(false);
+
+  useEffect(() => {
+    if (refreshStarted.current) return;
+    refreshStarted.current = true;
+    refreshAccessToken()
+      .then(async ({ access }) => {
+        const currentUser = await getCurrentUser(access);
+        setAccessToken(access);
+        setUser(currentUser);
+      })
+      .catch(() => {
+        setAccessToken(null);
+        setUser(null);
+      })
+      .finally(() => setRestoring(false));
+  }, []);
+
+  if (window.location.pathname === "/verify-email") return <VerificationPage />;
+
+  async function logout() {
+    try {
+      await logoutAccount();
+    } catch {
+      // Local authentication state must clear even if server cleanup is unavailable.
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+    }
+  }
+
+  return (
+    <>
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
+          <h1 className="text-2xl font-bold">Commerce Architect</h1>
+          <p className="mt-1 text-sm text-slate-600">Authentication and catalog development surface</p>
+        </div>
+      </header>
+      <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
+        {restoring ? (
+          <p className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">Restoring session…</p>
+        ) : user && accessToken ? (
+          <AccountPanel accessToken={accessToken} onLogout={logout} onUserChange={setUser} user={user} />
+        ) : (
+          <AuthPanel onLogin={(access, currentUser) => { setAccessToken(access); setUser(currentUser); }} />
+        )}
+      </main>
+      <ProductListPage />
+    </>
+  );
 }
 
 export default App;

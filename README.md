@@ -22,7 +22,7 @@ the repository root.
 
 -   Django + DRF backend operational
 -   PostgreSQL 16 running in a containerized local environment
--   React/Vite frontend with a product-list UI
+-   React/Vite frontend with product and end-to-end authentication UI
 -   Podman-compatible local development through the shared Compose file
 -   Docker Compose-based CI in GitHub Actions
 -   Pytest backend tests and Vitest frontend tests

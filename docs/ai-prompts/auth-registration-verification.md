@@ -1,5 +1,9 @@
 # Implementation Assignment: Registration and Email Verification
 
+> **Status: implemented on `feature/auth-registration-verification`.** This
+> approved assignment remains the acceptance contract for review and future
+> regression work.
+
 ## Objective
 
 Implement a small, independently testable end-to-end authentication slice that a

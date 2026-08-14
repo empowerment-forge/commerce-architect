@@ -324,6 +324,13 @@ forwarded HTTPS header only when explicitly enabled. `CSRF_TRUSTED_ORIGINS` is
 environment-driven. The frontend development server proxies `/api` using
 `VITE_API_PROXY_TARGET`; a deployed frontend API-base contract is not defined.
 
+Email verification adds non-secret production configuration:
+`AUTH_REQUIRE_VERIFIED_EMAIL`, positive token TTL and non-negative resend
+cooldown values, an absolute HTTPS `AUTH_FRONTEND_BASE_URL`, a delivery-capable
+`EMAIL_BACKEND`, and a non-local `DEFAULT_FROM_EMAIL`. Production startup rejects
+missing or local-only email settings. Provider credentials, if required by the
+selected backend, remain runtime secrets and must never use a `VITE_` prefix.
+
 **PLANNED principles:**
 
 - Keep every secret out of Git, images, build logs, browser bundles, and

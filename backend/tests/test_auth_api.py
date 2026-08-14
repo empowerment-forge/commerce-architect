@@ -1,10 +1,35 @@
 import pytest
+from django.core import mail
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import Client
+from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
+from datetime import timedelta
+from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
+from accounts.models import EmailVerification
+from accounts.services import issue_verification, token_digest
 from catalog.models import Product
+
+
+def registration_payload(**overrides):
+    payload = {
+        "username": "newuser",
+        "email": "NewUser@Example.COM",
+        "password": "SecurePass123!",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def verification_params(message=None):
+    message = message or mail.outbox[-1]
+    link = next(line for line in message.body.splitlines() if line.startswith("http"))
+    parsed = urlparse(link)
+    query = parse_qs(parsed.query)
+    return parsed, {"uid": query["uid"][0], "token": query["token"][0]}
 
 
 @pytest.mark.django_db
@@ -23,6 +48,19 @@ def test_registration_success(client):
     user = User.objects.get(username="newuser")
     assert user.email == "newuser@example.com"
     assert user.check_password("SecurePass123!")
+    assert response.json()["email_verified"] is False
+    assert "access" not in response.json()
+    verification = user.email_verification
+    assert verification.normalized_email == "newuser@example.com"
+    assert verification.token_digest
+    assert len(verification.token_digest) == 64
+    assert len(mail.outbox) == 1
+    parsed, params = verification_params()
+    assert parsed.scheme == "http"
+    assert parsed.netloc == "localhost:5173"
+    assert parsed.path == "/verify-email"
+    assert params["token"] not in verification.token_digest
+    assert token_digest(params["token"]) == verification.token_digest
 
 
 @pytest.mark.django_db
@@ -41,6 +79,172 @@ def test_registration_failure_duplicate_user(client):
 
     assert response.status_code == 400
     assert "username" in response.json()
+
+
+@pytest.mark.django_db
+def test_registration_rejects_duplicate_email_case_insensitively(client):
+    first = client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    assert first.status_code == 201
+
+    duplicate = client.post(
+        "/api/auth/register/",
+        registration_payload(username="other", email=" newuser@example.com "),
+        content_type="application/json",
+    )
+
+    assert duplicate.status_code == 400
+    assert "email" in duplicate.json()
+
+
+@pytest.mark.django_db
+def test_registration_applies_django_password_validation(client):
+    response = client.post(
+        "/api/auth/register/",
+        registration_payload(password="password"),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert "password" in response.json()
+    assert not User.objects.filter(username="newuser").exists()
+
+
+@pytest.mark.django_db
+def test_registration_delivery_failure_retains_unverified_account(client):
+    with patch("accounts.views.send_verification_email", side_effect=OSError):
+        response = client.post(
+            "/api/auth/register/",
+            registration_payload(),
+            content_type="application/json",
+        )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "verification_delivery_failed"
+    user = User.objects.get(username="newuser")
+    assert user.email_verification.verified_at is None
+
+
+@pytest.mark.django_db
+def test_verification_success_and_reuse_is_idempotent(client):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, params = verification_params()
+
+    response = client.post(
+        "/api/auth/verify-email/", params, content_type="application/json"
+    )
+    reused = client.post(
+        "/api/auth/verify-email/", params, content_type="application/json"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["code"] == "verified"
+    assert response.json()["email"] == "newuser@example.com"
+    assert response.json()["verified_at"]
+    assert reused.status_code == 200
+    assert reused.json()["code"] == "already_verified"
+
+
+@pytest.mark.django_db
+def test_verification_rejects_tampered_wrong_and_expired_tokens(client, settings):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, params = verification_params()
+
+    tampered = client.post(
+        "/api/auth/verify-email/",
+        {**params, "token": f"{params['token']}x"},
+        content_type="application/json",
+    )
+    wrong = client.post(
+        "/api/auth/verify-email/",
+        {**params, "uid": "00000000-0000-0000-0000-000000000000"},
+        content_type="application/json",
+    )
+    settings.AUTH_EMAIL_VERIFICATION_TTL_SECONDS = 1
+    verification = EmailVerification.objects.get(user__username="newuser")
+    verification.token_created_at = timezone.now() - timedelta(seconds=2)
+    verification.save(update_fields=["token_created_at"])
+    expired = client.post(
+        "/api/auth/verify-email/", params, content_type="application/json"
+    )
+
+    assert tampered.status_code == 400
+    assert wrong.status_code == 400
+    assert expired.status_code == 400
+    assert expired.json()["code"] == "invalid_or_expired_token"
+
+
+@pytest.mark.django_db
+def test_resend_is_enumeration_resistant_and_supersedes_token(client):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, original = verification_params()
+    verification = EmailVerification.objects.get(user__username="newuser")
+    verification.last_sent_at = timezone.now() - timedelta(minutes=2)
+    verification.save(update_fields=["last_sent_at"])
+
+    existing = client.post(
+        "/api/auth/resend-verification/",
+        {"email": "NEWUSER@example.com"},
+        content_type="application/json",
+    )
+    unknown = client.post(
+        "/api/auth/resend-verification/",
+        {"email": "unknown@example.com"},
+        content_type="application/json",
+    )
+    _, replacement = verification_params()
+
+    assert existing.status_code == unknown.status_code == 202
+    assert existing.json() == unknown.json()
+    assert len(mail.outbox) == 2
+    assert replacement["token"] != original["token"]
+    stale = client.post(
+        "/api/auth/verify-email/", original, content_type="application/json"
+    )
+    assert stale.status_code == 400
+
+
+@pytest.mark.django_db
+def test_resend_cooldown_and_verified_account_send_nothing(client):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, params = verification_params()
+    cooldown = client.post(
+        "/api/auth/resend-verification/",
+        {"email": "newuser@example.com"},
+        content_type="application/json",
+    )
+    assert cooldown.status_code == 202
+    assert len(mail.outbox) == 1
+
+    client.post("/api/auth/verify-email/", params, content_type="application/json")
+    verification = EmailVerification.objects.get(user__username="newuser")
+    verification.last_sent_at = timezone.now() - timedelta(minutes=2)
+    verification.save(update_fields=["last_sent_at"])
+    client.post(
+        "/api/auth/resend-verification/",
+        {"email": "newuser@example.com"},
+        content_type="application/json",
+    )
+    assert len(mail.outbox) == 1
 
 
 @pytest.mark.django_db
@@ -79,6 +283,193 @@ def test_token_obtain_failure(client):
     )
 
     assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_login_enforcement_blocks_unverified_and_allows_verified(client, settings):
+    settings.AUTH_REQUIRE_VERIFIED_EMAIL = True
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, params = verification_params()
+
+    blocked = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    assert blocked.status_code == 403
+    assert blocked.json()["code"] == "email_not_verified"
+    assert "refresh_token" not in blocked.cookies
+
+    client.post("/api/auth/verify-email/", params, content_type="application/json")
+    allowed = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    assert allowed.status_code == 200
+    assert "refresh_token" in allowed.cookies
+
+
+@pytest.mark.django_db
+def test_login_enforcement_disabled_allows_unverified(client, settings):
+    settings.AUTH_REQUIRE_VERIFIED_EMAIL = False
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+
+    response = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_email_change_invalidates_verification_and_old_token(client, settings):
+    settings.AUTH_REQUIRE_VERIFIED_EMAIL = True
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, old_params = verification_params()
+    client.post(
+        "/api/auth/verify-email/", old_params, content_type="application/json"
+    )
+    login = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    access = login.json()["access"]
+
+    changed = client.post(
+        "/api/auth/change-email/",
+        {"email": " NewAddress@Example.COM "},
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+    )
+    _, new_params = verification_params()
+
+    assert changed.status_code == 200
+    assert changed.json()["email"] == "newaddress@example.com"
+    user = User.objects.get(username="newuser")
+    assert user.email == "newaddress@example.com"
+    assert user.email_verification.verified_at is None
+    assert user.email_verification.normalized_email == "newaddress@example.com"
+
+    stale = client.post(
+        "/api/auth/verify-email/", old_params, content_type="application/json"
+    )
+    assert stale.status_code == 400
+
+    me_unverified = client.get(
+        "/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {access}"
+    )
+    assert me_unverified.json()["email"] == "newaddress@example.com"
+    assert me_unverified.json()["email_verified"] is False
+    assert me_unverified.json()["email_verified_at"] is None
+
+    blocked_login = Client().post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    assert blocked_login.status_code == 403
+
+    verified = client.post(
+        "/api/auth/verify-email/", new_params, content_type="application/json"
+    )
+    assert verified.status_code == 200
+    assert verified.json()["email"] == "newaddress@example.com"
+    me_verified = client.get(
+        "/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {access}"
+    )
+    assert me_verified.json()["email_verified"] is True
+
+
+@pytest.mark.django_db
+def test_email_change_rejects_duplicate_and_resend_uses_only_current_email(client):
+    other = User.objects.create_user(
+        username="other",
+        email="reserved@example.com",
+        password="SecurePass123!",
+    )
+    EmailVerification.objects.create(
+        user=other,
+        normalized_email="reserved@example.com",
+    )
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    login = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    access = login.json()["access"]
+
+    duplicate = client.post(
+        "/api/auth/change-email/",
+        {"email": "RESERVED@example.com"},
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+    )
+    assert duplicate.status_code == 400
+
+    changed = client.post(
+        "/api/auth/change-email/",
+        {"email": "current@example.com"},
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+    )
+    assert changed.status_code == 200
+    assert mail.outbox[-1].to == ["current@example.com"]
+    sent_count = len(mail.outbox)
+
+    old_resend = client.post(
+        "/api/auth/resend-verification/",
+        {"email": "newuser@example.com"},
+        content_type="application/json",
+    )
+    assert old_resend.status_code == 202
+    assert len(mail.outbox) == sent_count
+
+
+@pytest.mark.django_db
+def test_email_change_delivery_failure_keeps_new_address_unverified(client):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    login = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    with patch("accounts.views.send_verification_email", side_effect=OSError):
+        response = client.post(
+            "/api/auth/change-email/",
+            {"email": "delivery-failed@example.com"},
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {login.json()['access']}",
+        )
+
+    assert response.status_code == 503
+    user = User.objects.get(username="newuser")
+    assert user.email == "delivery-failed@example.com"
+    assert user.email_verification.verified_at is None
 
 
 @pytest.mark.django_db

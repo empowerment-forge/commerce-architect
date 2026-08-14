@@ -142,12 +142,29 @@ production.
 | `DATABASE_USER` | Derived from `POSTGRES_USER` | Required |
 | `DATABASE_PASSWORD` | Fixed local-only value | Required; known development values are rejected |
 | `DATABASE_PORT` | `5432` | Optional; defaults to `5432` |
+| `AUTH_REQUIRE_VERIFIED_EMAIL` | `true` in Compose to exercise the full flow | Explicit policy; defaults to `false` outside Compose for existing-account compatibility |
+| `AUTH_EMAIL_VERIFICATION_TTL_SECONDS` | `86400` | Positive token lifetime |
+| `AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS` | `60` | Non-negative resend cooldown |
+| `AUTH_FRONTEND_BASE_URL` | `http://localhost:5173` | Required absolute HTTPS URL in production |
+| `EMAIL_BACKEND` | Django console backend | Required delivery-capable backend in production |
+| `DEFAULT_FROM_EMAIL` | Local non-delivery sender | Required non-local sender in production |
 
 Production fails startup if its Django secret is absent, shorter than 50
 characters, begins with `django-insecure-`, or contains `changeme`. It also
 fails if debug is enabled, deployment hosts are absent, only development hosts
 are supplied, database settings are missing, or a known development database
 password is reused.
+
+For local email verification, follow the `web` logs after registration:
+
+```bash
+podman-compose logs -f web
+# or: docker compose logs -f web
+```
+
+Open the printed `http://localhost:5173/verify-email?...` link in the browser.
+No external email provider is needed. Production rejects missing/insecure
+frontend URL, console/dummy/in-memory email backends, and a local sender.
 
 ## HTTPS and Proxy Variables
 
