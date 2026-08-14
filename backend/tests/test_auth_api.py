@@ -10,7 +10,12 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from accounts.models import EmailVerification
-from accounts.services import issue_verification, token_digest
+from accounts.services import (
+    issue_verification,
+    send_verification_email,
+    token_digest,
+    verification_url,
+)
 from catalog.models import Product
 
 
@@ -61,6 +66,45 @@ def test_registration_success(client):
     assert parsed.path == "/verify-email"
     assert params["token"] not in verification.token_digest
     assert token_digest(params["token"]) == verification.token_digest
+
+
+@pytest.mark.django_db
+def test_readable_console_url_round_trips_through_verification_api(
+    client, settings, capsys
+):
+    settings.MAILERS = {
+        "default": {"BACKEND": "accounts.mail.ReadableConsoleEmailBackend"}
+    }
+    user = User.objects.create_user(
+        username="consoleuser",
+        email="consoleuser@example.com",
+        password="SecurePass123!",
+    )
+    verification = EmailVerification.objects.create(
+        user=user,
+        normalized_email=user.email,
+    )
+    issued = issue_verification(verification)
+    expected_url = verification_url(issued)
+
+    send_verification_email(issued)
+    output = capsys.readouterr().out
+    printed_url = next(line for line in output.splitlines() if line.startswith("http"))
+    parsed = urlparse(printed_url)
+    query = parse_qs(parsed.query)
+    params = {"uid": query["uid"][0], "token": query["token"][0]}
+
+    verification.refresh_from_db()
+    assert printed_url == expected_url
+    assert "=3D" not in printed_url
+    assert params["uid"] == str(verification.pk)
+    assert token_digest(params["token"]) == verification.token_digest
+
+    response = client.post(
+        "/api/auth/verify-email/", params, content_type="application/json"
+    )
+    assert response.status_code == 200
+    assert response.json()["code"] == "verified"
 
 
 @pytest.mark.django_db

@@ -102,7 +102,7 @@ def test_development_loads_with_explicit_safe_environment():
     assert settings["verification_ttl"] == 86400
     assert settings["resend_cooldown"] == 60
     assert settings["auth_frontend_base_url"] == "http://localhost:5173"
-    assert settings["email_backend"] == "django.core.mail.backends.console.EmailBackend"
+    assert settings["email_backend"] == "accounts.mail.ReadableConsoleEmailBackend"
 
 
 def test_development_requires_explicit_secret_key():
@@ -273,6 +273,14 @@ def test_production_rejects_unsafe_auth_email_configuration():
     )
     assert console_backend.returncode != 0
     assert "delivery-capable EMAIL_BACKEND" in console_backend.stderr
+
+    readable_console_backend = run_settings_probe(
+        **base,
+        AUTH_FRONTEND_BASE_URL="https://commerce.example",
+        EMAIL_BACKEND="accounts.mail.ReadableConsoleEmailBackend",
+    )
+    assert readable_console_backend.returncode != 0
+    assert "delivery-capable EMAIL_BACKEND" in readable_console_backend.stderr
 
     local_sender = run_settings_probe(
         **{**base, "DEFAULT_FROM_EMAIL": "noreply@localhost"},

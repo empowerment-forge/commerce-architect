@@ -152,7 +152,7 @@ AUTH_FRONTEND_BASE_URL = os.environ.get(
 EMAIL_BACKEND_NAME = os.environ.get(
     "EMAIL_BACKEND",
     (
-        "django.core.mail.backends.console.EmailBackend"
+        "accounts.mail.ReadableConsoleEmailBackend"
         if not IS_PRODUCTION
         else ""
     ),
@@ -174,6 +174,7 @@ if IS_PRODUCTION:
     unsafe_email_backends = {
         "",
         "django.core.mail.backends.console.EmailBackend",
+        "accounts.mail.ReadableConsoleEmailBackend",
         "django.core.mail.backends.dummy.EmailBackend",
         "django.core.mail.backends.locmem.EmailBackend",
     }

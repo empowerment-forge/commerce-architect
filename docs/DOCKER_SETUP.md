@@ -148,7 +148,7 @@ production.
 | `AUTH_EMAIL_VERIFICATION_TTL_SECONDS` | `86400` | Positive token lifetime |
 | `AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS` | `60` | Non-negative resend cooldown |
 | `AUTH_FRONTEND_BASE_URL` | `http://localhost:5173` | Required absolute HTTPS URL in production |
-| `EMAIL_BACKEND` | Django console backend | Required delivery-capable backend in production |
+| `EMAIL_BACKEND` | First-party readable console backend | Required delivery-capable backend in production |
 | `DEFAULT_FROM_EMAIL` | Local non-delivery sender | Required non-local sender in production |
 
 Production fails startup if its Django secret is absent, shorter than 50
@@ -157,7 +157,9 @@ fails if debug is enabled, deployment hosts are absent, only development hosts
 are supplied, database settings are missing, or a known development database
 password is reused.
 
-For local email verification, follow the `web` logs after registration:
+For local email verification, the first-party console backend prints the plain
+message body without MIME transfer encoding. Follow the `web` logs after
+registration:
 
 ```bash
 podman-compose logs -f web
