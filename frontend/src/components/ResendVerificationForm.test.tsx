@@ -13,7 +13,7 @@ describe("ResendVerificationForm", () => {
   it("submits the email and displays the enumeration-resistant response", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       response({
-        detail: "If an eligible unverified account exists, a verification email will be sent.",
+        detail: "If an eligible unverified account exists and the resend cooldown has elapsed, a verification email will be sent.",
       }, true, 202),
     );
     const user = userEvent.setup();
@@ -42,6 +42,19 @@ describe("ResendVerificationForm", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to request another verification email");
   });
 
+  it("shows public email syntax validation without account-state detail", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      response({ email: ["Enter a valid email address."] }, false, 400),
+    );
+    const user = userEvent.setup();
+    render(<ResendVerificationForm />);
+
+    await user.type(screen.getByLabelText("Email address"), "invalid@example");
+    await user.click(screen.getByRole("button", { name: "Resend verification email" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid email address");
+  });
+
   it("keeps the full form collapsed until recovery is requested", async () => {
     const user = userEvent.setup();
     render(<ResendVerificationForm collapsed initialEmail="alice@example.com" />);
@@ -54,7 +67,7 @@ describe("ResendVerificationForm", () => {
 
   it("cancels an expanded recovery form and clears transient feedback", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      response({ detail: "If an eligible unverified account exists, a verification email will be sent." }, true, 202),
+      response({ detail: "If an eligible unverified account exists and the resend cooldown has elapsed, a verification email will be sent." }, true, 202),
     );
     const user = userEvent.setup();
     render(<ResendVerificationForm collapsed initialEmail="alice@example.com" />);

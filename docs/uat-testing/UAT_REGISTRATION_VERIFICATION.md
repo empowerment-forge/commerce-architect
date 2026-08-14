@@ -116,6 +116,10 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 -   The browser remains logged out.
 -   Resend is presented only as the secondary
     `Didn't receive the email? Resend verification` action.
+-   Selecting resend makes a one-click request for the normalized registration
+    email without displaying an email input.
+-   The generic response mentions eligibility and cooldown without claiming that
+    a message was definitely sent.
 
 **Actual**
 
@@ -126,20 +130,24 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 
 -
 
-### Scenario 5 — Expand and cancel registration recovery
+### Scenario 5 — Public resend recovery
 
 **Steps**
 
-1. Select `Didn't receive the email? Resend verification`.
-2. Optionally submit once and observe its response.
-3. Select `Cancel`.
-4. Expand the form again.
+1. In a fresh logged-out view, open `Login | Register` without registering.
+2. Select `Need another verification email?`.
+3. Enter an existing unverified test email and submit.
+4. Select `Cancel`, then reopen the recovery form.
+5. Repeat with an unknown or already-verified disposable address.
 
 **Expected**
 
--   The secondary action expands an email resend form.
--   Cancel collapses the form.
--   Transient resend success or error feedback does not reappear when reopened.
+-   Public recovery is discoverable without registration or successful login.
+-   The form requires an email because no account context is trusted yet.
+-   Known, unknown, verified, and cooldown-limited addresses receive the same
+    generic response.
+-   Invalid email syntax receives normal field validation.
+-   Cancel collapses the form and transient feedback does not reappear.
 
 **Actual**
 
@@ -208,7 +216,8 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 
 -   Login is rejected while verified-email enforcement is enabled.
 -   No authenticated session is created.
--   The secondary resend recovery action is available.
+-   The public resend recovery form is available without revealing whether an
+    account exists.
 
 **Actual**
 
@@ -336,15 +345,18 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 **Steps**
 
 1. Open Account after changing the email.
-2. Select `Resend verification email` after any configured cooldown has elapsed.
-3. Inspect the destination of the new console email.
+2. Select `Resend verification email` immediately after the email change.
+3. If cooldown feedback appears, wait the stated interval and select it again.
+4. Inspect the destination of the new console email.
 
 **Expected**
 
 -   `Account status: Not Verified` and the resend action are visible.
 -   No email input is requested.
 -   The message targets only the account's current changed email.
--   Clear success feedback appears and verification state remains unchanged.
+-   The response truthfully reports either sent, cooldown, or delivery failure.
+-   After the cooldown, success corresponds to a new console email and token.
+-   Resending does not itself change verification state.
 
 **Actual**
 

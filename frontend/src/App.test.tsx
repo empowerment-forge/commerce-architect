@@ -71,7 +71,7 @@ describe("App authentication flow", () => {
   });
 
   it("registers and shows the check-email result", async () => {
-    mockApi({
+    const fetchMock = mockApi({
       "/api/auth/refresh/": () => response({}, false, 401),
       "/api/auth/register/": () => response({
         id: 1,
@@ -80,6 +80,9 @@ describe("App authentication flow", () => {
         email_verified: false,
         detail: "Registration succeeded. Check your email to verify the account.",
       }, true, 201),
+      "/api/auth/resend-verification/": () => response({
+        detail: "If an eligible unverified account exists and the resend cooldown has elapsed, a verification email will be sent.",
+      }, true, 202),
     });
     const user = userEvent.setup();
     render(<App />);
@@ -95,8 +98,34 @@ describe("App authentication flow", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
     expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Didn't receive the email? Resend verification" }));
-    expect(screen.getByLabelText("Email address")).toHaveValue("alice@example.com");
-    expect(screen.getByRole("button", { name: "Resend verification email" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
+    expect(await screen.findByText(/resend cooldown has elapsed/)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/resend-verification/",
+      expect.objectContaining({ body: JSON.stringify({ email: "alice@example.com" }) }),
+    );
+  });
+
+  it("offers public resend recovery before registration or login", async () => {
+    const fetchMock = mockApi({
+      "/api/auth/refresh/": () => response({}, false, 401),
+      "/api/auth/resend-verification/": () => response({
+        detail: "If an eligible unverified account exists and the resend cooldown has elapsed, a verification email will be sent.",
+      }, true, 202),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Login | Register" }));
+    await user.click(screen.getByRole("button", { name: "Need another verification email?" }));
+    await user.type(screen.getByLabelText("Email address"), "recover@example.com");
+    await user.click(screen.getByRole("button", { name: "Resend verification email" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("eligible unverified account");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/resend-verification/",
+      expect.objectContaining({ body: JSON.stringify({ email: "recover@example.com" }) }),
+    );
   });
 
   it("shows a password validation error at the password field", async () => {
@@ -208,7 +237,8 @@ describe("App authentication flow", () => {
     await user.click(screen.getByRole("button", { name: "Login" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Verify your current email");
-    expect(screen.getByRole("button", { name: "Didn't receive the email? Resend verification" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Email address")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resend verification email" })).toBeInTheDocument();
   });
 
   it("shows a useful bad-credentials error", async () => {
@@ -307,7 +337,8 @@ describe("App authentication flow", () => {
         email_verified_at: null,
       }),
       "/api/auth/resend-verification-authenticated/": () => response({
-        detail: "If the account is unverified, a verification email will be sent.",
+        code: "verification_email_sent",
+        detail: "Verification email sent to your current email address.",
       }, true, 202),
     });
     const user = userEvent.setup();
@@ -317,7 +348,7 @@ describe("App authentication flow", () => {
     expect(await screen.findByText("Not Verified")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Resend verification email" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("account is unverified");
+    expect(await screen.findByRole("status")).toHaveTextContent("current email address");
     const resendCall = fetchMock.mock.calls.find(
       ([url]) => url === "/api/auth/resend-verification-authenticated/",
     );
@@ -326,6 +357,34 @@ describe("App authentication flow", () => {
       headers: expect.objectContaining({ Authorization: "Bearer restored-token" }),
     });
     expect(resendCall?.[1]).toHaveProperty("body", undefined);
+  });
+
+  it("shows explicit authenticated resend cooldown feedback without stale success", async () => {
+    let attempts = 0;
+    mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response({
+        ...verifiedUser,
+        email_verified: false,
+        email_verified_at: null,
+      }),
+      "/api/auth/resend-verification-authenticated/": () => {
+        attempts += 1;
+        return attempts === 1
+          ? response({ code: "verification_email_sent", detail: "Verification email sent to your current email address." }, true, 202)
+          : response({ code: "resend_cooldown", detail: "A verification email was sent recently. Try again in 60 seconds.", retry_after_seconds: 60 }, false, 429);
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    await user.click(screen.getByRole("button", { name: "Resend verification email" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Verification email sent");
+    await user.click(screen.getByRole("button", { name: "Resend verification email" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Try again in 60 seconds");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("shows the committed unverified address when email-change delivery fails", async () => {

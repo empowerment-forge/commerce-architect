@@ -47,7 +47,7 @@ describe("VerificationPage", () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(response({ code: "invalid_or_expired_token" }, false, 400))
       .mockResolvedValueOnce(response({
-        detail: "If an eligible unverified account exists, a verification email will be sent.",
+        detail: "If an eligible unverified account exists and the resend cooldown has elapsed, a verification email will be sent.",
       }, true, 202));
     const user = userEvent.setup();
     render(<VerificationPage />);

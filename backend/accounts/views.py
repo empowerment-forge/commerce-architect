@@ -35,7 +35,8 @@ DELIVERY_ERROR = {
     "detail": "The account is unverified and the email could not be sent. Try resending.",
 }
 RESEND_DETAIL = (
-    "If an eligible unverified account exists, a verification email will be sent."
+    "If an eligible unverified account exists and the resend cooldown has elapsed, "
+    "a verification email will be sent."
 )
 
 
@@ -129,10 +130,10 @@ class ResendVerificationView(APIView):
         serializer = ResendVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         normalized_email = serializer.validated_data["email"]
-        issued = resend_verification(normalized_email)
-        if issued:
+        result = resend_verification(normalized_email)
+        if result.issued:
             try:
-                send_verification_email(issued)
+                send_verification_email(result.issued)
             except (ValueError, OSError):
                 pass
 
@@ -143,10 +144,38 @@ class AuthenticatedResendVerificationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        issued = resend_verification(normalize_email(request.user.email))
-        if issued:
+        result = resend_verification(normalize_email(request.user.email))
+        if result.status == "cooldown":
+            return Response(
+                {
+                    "code": "resend_cooldown",
+                    "detail": (
+                        "A verification email was sent recently. "
+                        f"Try again in {result.retry_after_seconds} seconds."
+                    ),
+                    "retry_after_seconds": result.retry_after_seconds,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        if result.status == "verified":
+            return Response(
+                {
+                    "code": "email_already_verified",
+                    "detail": "The current email address is already verified.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        if result.status in {"not_found", "email_mismatch"}:
+            return Response(
+                {
+                    "code": "verification_state_unavailable",
+                    "detail": "Verification is unavailable for the current email address.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        if result.issued:
             try:
-                send_verification_email(issued)
+                send_verification_email(result.issued)
             except (ValueError, OSError):
                 return Response(
                     DELIVERY_ERROR,
@@ -154,7 +183,10 @@ class AuthenticatedResendVerificationView(APIView):
                 )
 
         return Response(
-            {"detail": "If the account is unverified, a verification email will be sent."},
+            {
+                "code": "verification_email_sent",
+                "detail": "Verification email sent to your current email address.",
+            },
             status=status.HTTP_202_ACCEPTED,
         )
 

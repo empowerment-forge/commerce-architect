@@ -279,16 +279,38 @@ def test_resend_cooldown_and_verified_account_send_nothing(client):
     assert cooldown.status_code == 202
     assert len(mail.outbox) == 1
 
+    unknown = client.post(
+        "/api/auth/resend-verification/",
+        {"email": "unknown@example.com"},
+        content_type="application/json",
+    )
+    assert unknown.status_code == 202
+    assert cooldown.json() == unknown.json()
+
     client.post("/api/auth/verify-email/", params, content_type="application/json")
     verification = EmailVerification.objects.get(user__username="newuser")
     verification.last_sent_at = timezone.now() - timedelta(minutes=2)
     verification.save(update_fields=["last_sent_at"])
-    client.post(
+    verified = client.post(
         "/api/auth/resend-verification/",
         {"email": "newuser@example.com"},
         content_type="application/json",
     )
     assert len(mail.outbox) == 1
+    assert verified.status_code == 202
+    assert verified.json() == cooldown.json()
+
+
+@pytest.mark.django_db
+def test_public_resend_rejects_malformed_email_without_account_detail(client):
+    response = client.post(
+        "/api/auth/resend-verification/",
+        {"email": "not-an-email"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"email": ["Enter a valid email address."]}
 
 
 @pytest.mark.django_db
@@ -310,12 +332,14 @@ def test_authenticated_resend_targets_current_email_and_rotates_token(client):
 
     resent = client.post(
         "/api/auth/resend-verification-authenticated/",
+        {"email": "attacker-controlled@example.com"},
         content_type="application/json",
         HTTP_AUTHORIZATION=f"Bearer {login.json()['access']}",
     )
     _, replacement = verification_params()
 
     assert resent.status_code == 202
+    assert resent.json()["code"] == "verification_email_sent"
     assert mail.outbox[-1].to == ["newuser@example.com"]
     assert replacement["token"] != original["token"]
     assert client.post(
@@ -324,6 +348,73 @@ def test_authenticated_resend_targets_current_email_and_rotates_token(client):
     assert client.post(
         "/api/auth/verify-email/", replacement, content_type="application/json"
     ).status_code == 200
+
+
+@pytest.mark.django_db
+def test_authenticated_resend_reports_cooldown_without_sending(client):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, params = verification_params()
+    client.post("/api/auth/verify-email/", params, content_type="application/json")
+    login = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    changed = client.post(
+        "/api/auth/change-email/",
+        {"email": "changed@example.com"},
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {login.json()['access']}",
+    )
+    assert changed.status_code == 200
+    verification = EmailVerification.objects.get(user__username="newuser")
+    original_digest = verification.token_digest
+
+    response = client.post(
+        "/api/auth/resend-verification-authenticated/",
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {login.json()['access']}",
+    )
+
+    verification.refresh_from_db()
+    assert response.status_code == 429
+    assert response.json()["code"] == "resend_cooldown"
+    assert response.json()["retry_after_seconds"] > 0
+    assert verification.token_digest == original_digest
+    assert len(mail.outbox) == 2
+
+
+@pytest.mark.django_db
+def test_authenticated_resend_does_not_send_for_verified_account(client):
+    client.post(
+        "/api/auth/register/",
+        registration_payload(),
+        content_type="application/json",
+    )
+    _, params = verification_params()
+    client.post("/api/auth/verify-email/", params, content_type="application/json")
+    login = client.post(
+        "/api/auth/token/",
+        {"username": "newuser", "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    verification = EmailVerification.objects.get(user__username="newuser")
+    verification.last_sent_at = timezone.now() - timedelta(minutes=2)
+    verification.save(update_fields=["last_sent_at"])
+
+    response = client.post(
+        "/api/auth/resend-verification-authenticated/",
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {login.json()['access']}",
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "email_already_verified"
+    assert len(mail.outbox) == 1
 
 
 @pytest.mark.django_db

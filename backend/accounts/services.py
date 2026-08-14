@@ -1,4 +1,5 @@
 import hashlib
+import math
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
@@ -26,6 +27,13 @@ class IssuedVerification:
     token: str
 
 
+@dataclass(frozen=True)
+class ResendVerificationResult:
+    status: str
+    issued: IssuedVerification | None = None
+    retry_after_seconds: int | None = None
+
+
 def issue_verification(verification):
     token = secrets.token_urlsafe(32)
     now = timezone.now()
@@ -47,22 +55,32 @@ def resend_verification(normalized_email):
             .get(normalized_email=normalized_email)
         )
     except EmailVerification.DoesNotExist:
-        return None
+        return ResendVerificationResult(status="not_found")
 
     cooldown = timedelta(
         seconds=settings.AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS
     )
     current_email = normalize_email(verification.user.email)
+    if is_verified(verification.user):
+        return ResendVerificationResult(status="verified")
+    if current_email != verification.normalized_email:
+        return ResendVerificationResult(status="email_mismatch")
+    now = timezone.now()
     if (
-        is_verified(verification.user)
-        or current_email != verification.normalized_email
-        or (
-            verification.last_sent_at is not None
-            and timezone.now() < verification.last_sent_at + cooldown
-        )
+        verification.last_sent_at is not None
+        and now < verification.last_sent_at + cooldown
     ):
-        return None
-    return issue_verification(verification)
+        retry_after = math.ceil(
+            (verification.last_sent_at + cooldown - now).total_seconds()
+        )
+        return ResendVerificationResult(
+            status="cooldown",
+            retry_after_seconds=max(1, retry_after),
+        )
+    return ResendVerificationResult(
+        status="sent",
+        issued=issue_verification(verification),
+    )
 
 
 def verification_url(issued):

@@ -8,12 +8,14 @@ type ResendVerificationFormProps = {
   collapsed?: boolean;
   initialEmail?: string;
   onCancel?: () => void;
+  triggerLabel?: string;
 };
 
 export function ResendVerificationForm({
   collapsed = false,
   initialEmail = "",
   onCancel,
+  triggerLabel = "Didn't receive the email? Resend verification",
 }: ResendVerificationFormProps) {
   const [open, setOpen] = useState(!collapsed);
   const [message, setMessage] = useState<string | null>(null);
@@ -37,9 +39,12 @@ export function ResendVerificationForm({
       const result = await resendVerification(email);
       setMessage(result.detail);
     } catch (requestError) {
+      const emailErrors = requestError instanceof ApiError ? requestError.body.email : null;
       const detail = requestError instanceof ApiError && typeof requestError.body.detail === "string"
         ? requestError.body.detail
-        : null;
+        : Array.isArray(emailErrors) && typeof emailErrors[0] === "string"
+          ? emailErrors[0]
+          : null;
       setError(detail ?? "Unable to request another verification email. Please try again.");
     } finally {
       setBusy(false);
@@ -53,7 +58,7 @@ export function ResendVerificationForm({
         onClick={() => setOpen(true)}
         type="button"
       >
-        Didn&apos;t receive the email? Resend verification
+        {triggerLabel}
       </button>
     );
   }

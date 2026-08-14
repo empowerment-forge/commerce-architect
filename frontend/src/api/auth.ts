@@ -46,7 +46,7 @@ export function resendVerification(email: string) {
 }
 
 export function resendVerificationAuthenticated(accessToken: string) {
-  return apiRequest<{ detail: string }>("/api/auth/resend-verification-authenticated/", {
+  return apiRequest<{ code: "verification_email_sent"; detail: string }>("/api/auth/resend-verification-authenticated/", {
     method: "POST",
     token: accessToken,
   });
