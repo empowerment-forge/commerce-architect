@@ -65,6 +65,8 @@ Deliver one minimal usable slice:
 - A verified user can log in through the existing token endpoint.
 - The UI loads `/api/auth/me/` with the in-memory access token and shows the
   authenticated username/email and verification status.
+- An authenticated user can change their email address and is clearly told that
+  the new normalized address must be verified independently.
 - Logout clears backend refresh state and all frontend access/auth state.
 - Common validation and authentication failures are understandable without
   opening developer tools.
@@ -114,8 +116,42 @@ tokens/cookie. Existing logout and refresh behavior remains unchanged.
 - Resend uses an enumeration-resistant response and is rate-limit-ready. A
   minimal in-model cooldown is acceptable; adding a third-party throttling
   dependency is not.
-- Email-address changes after registration are out of scope. Do not silently
-  mutate the address during resend or verification.
+
+### Email-address change and reverification
+
+Verification applies only to the exact normalized email stored when the token
+was issued. It is never a permanent user-level flag that survives an address
+change.
+
+An authenticated email change must use one accounts-owned service operation and
+one database transaction to:
+
+1. Normalize and validate the requested address and reserve it under the same
+   case-insensitive uniqueness rule as registration.
+2. Update `User.email` and the verification record's `normalized_email`.
+3. Clear `verified_at` immediately, before reporting success.
+4. Invalidate the previous token digest and issue a new token bound to the new
+   normalized address.
+5. Send a verification message only to the new address after commit.
+
+A token is valid only when its bound normalized address still matches both the
+verification record and current `User.email`. Consequently, every stale token
+for the previous address must fail even if it has not reached its original
+expiry. Resend looks up and sends only to the account's current normalized
+address; it must never revive, target, or reveal a prior address.
+
+When login enforcement is enabled, changing the address makes subsequent
+credential login return `email_not_verified` until the new address succeeds.
+When enforcement is disabled, login may continue but `/me` must still report the
+new address as unverified. This slice does not automatically revoke already
+issued access or refresh tokens on email change; an existing authenticated
+session may continue and must observe the new unverified state through `/me`.
+That session policy must be documented and tested rather than inferred.
+
+Audit and security events, if recorded, must distinguish the actor/user ID, old
+normalized address, new normalized address, verification invalidation time, and
+later verification time without recording raw tokens. A verified timestamp must
+never be presented without the normalized address it applies to.
 
 ## 5. Verification-token and security requirements
 
@@ -152,6 +188,9 @@ Implement the smallest routing/state structure needed for:
   success, already verified, expired/invalid, and network-failure states.
 - Authenticated view: uses the in-memory access token with
   `GET /api/auth/me/` and displays username, email, and `email_verified`.
+- Authenticated email change: submits the new address, updates the displayed
+  `/me` state to the current unverified address, and directs the user to the new
+  verification email.
 - Logout action: calls the backend with credentials included, then clears local
   state even if the server says the cookie is absent/invalid.
 
@@ -207,14 +246,28 @@ stable machine-readable code and must not expose provider details.
 
 Request: `{ "uid": "<opaque-record-id>", "token": "<raw-token>" }`.
 Success: 200 with `email_verified: true`, `verified_at`, and code `verified`.
-Already verified: 200 with code `already_verified`. Invalid/expired/superseded:
-400 with generic code `invalid_or_expired_token`.
+The response also includes the normalized `email` that was verified. Already
+verified: 200 with code `already_verified` and that same address.
+Invalid/expired/superseded: 400 with generic code
+`invalid_or_expired_token`.
 
 ### `POST /api/auth/resend-verification/`
 
 Request: `{ "email": "alice@example.com" }`. Public response: always 202 with
 the same detail text for syntactically valid email input. Malformed input may
-return 400. Do not reveal account state.
+return 400. Do not reveal account state. For an eligible account, delivery must
+target only the current normalized `User.email`; a former address cannot be used
+to select the account or receive a new token.
+
+### `POST /api/auth/change-email/`
+
+Requires a Bearer access token. Request: `{ "email": "new@example.com" }`.
+Success: 200 with the current normalized `email`, `email_verified: false`, and a
+safe check-your-email detail. The operation atomically changes the address,
+invalidates prior verification and tokens, and issues a token for the new
+address. Invalid/duplicate input returns field-keyed 400 errors. Delivery
+failure follows the same retained-unverified-account and resend recovery policy
+as registration, without restoring the old address or verified state.
 
 ### `POST /api/auth/token/`
 
@@ -228,7 +281,8 @@ Invalid credentials remain 401 with a generic message.
 - `POST /api/auth/refresh/`: unchanged 200 access response/rotated cookie or 401.
 - `POST /api/auth/logout/`: unchanged idempotent 200 and cookie clearing.
 - `GET /api/auth/me/`: unchanged authentication requirement and existing fields;
-  add `email_verified` and nullable `email_verified_at`.
+  add `email_verified` and nullable `email_verified_at`. The boolean/timestamp
+  apply to the `email` in that same response only.
 
 ## 9. Automated test requirements
 
@@ -242,9 +296,18 @@ Backend tests must cover:
 - transaction/delivery failure policy;
 - valid verification, expiry, tampering, wrong record, resend supersession,
   single use, and idempotent already-verified behavior;
+- verified-user email change atomically updates `User.email` and the verification
+  record, clears `verified_at`, and invalidates the old token;
+- an old verification link cannot verify the former or current address after an
+  email change, while the newly issued link verifies the new address;
+- email-change delivery targets only the new address, and resend accepts/sends
+  only for the current address without reviving stale state;
 - enumeration-resistant resend and cooldown;
-- enforcement setting on/off, with no cookie on rejected login;
-- `/me` verification fields;
+- enforcement setting on/off after email change, with no cookie on rejected new
+  login when enabled and permitted login remaining explicitly unverified when
+  disabled;
+- `/me` returns the current email and matching verification state before and
+  after reverification;
 - regression coverage for token issuance, cookie attributes, refresh rotation,
   blacklist behavior, logout, and unauthenticated `/me`.
 
@@ -255,6 +318,8 @@ Frontend tests must cover:
 - register success/failure states;
 - verification pending/success/already-used/invalid/network states;
 - login success, bad credentials, and unverified error;
+- authenticated email-change success/validation/delivery-failure states and the
+  immediate rendering of the new address as unverified;
 - in-memory token use, `/me` rendering, one startup refresh attempt, failed
   refresh cleanup, and logout cleanup;
 - no persistent token storage calls.
@@ -288,6 +353,17 @@ tests must be able to follow only these steps:
   without a new login.
 - [ ] Duplicate username/email, weak password, bad credentials, missing email,
   and unavailable backend show clear errors.
+- [ ] While authenticated as a verified user, change to a different available
+  email address and see `/me` immediately show that new address as unverified.
+- [ ] Confirm the old verification link/token no longer works after the change.
+- [ ] Confirm a verification message is sent only to the new address; resending
+  using the old address does not target or disclose the account.
+- [ ] Open the new link and confirm the new address verifies successfully and
+  `/me` now reports it as verified.
+- [ ] With enforcement enabled, log out before verifying the changed address and
+  confirm login is blocked with no refresh cookie; after verification, confirm
+  login succeeds. With enforcement disabled, confirm login is allowed but `/me`
+  remains unverified until the new address is verified.
 
 ## 11. Explicit out of scope
 
@@ -296,7 +372,7 @@ tests must be able to follow only these steps:
 - password reset/recovery
 - OAuth 2.0, OIDC, social login, or external identity providers
 - a Backend-for-Frontend (BFF)
-- email-address change or multiple addresses per account
+- multiple simultaneous addresses per account or address history UI
 - HTML email design, provider selection, deliverability analytics, or polished UI
 - a general concurrent refresh queue/interceptor architecture
 - unrelated catalog, orders, checkout, payment, or other commerce-domain changes
@@ -326,6 +402,16 @@ pre-existing users: create verification records deterministically, flag blank or
 duplicate emails for operator review, and do not silently mark addresses verified
 without an explicit documented policy. Keep enforcement off until that review is
 complete.
+
+All application writes to `User.email` in this slice must go through the
+accounts-owned change operation so verification is invalidated atomically. The
+model invariant is: `verified_at` applies if and only if the verification
+record's normalized address equals the current normalized `User.email`. Direct
+admin or shell edits can bypass application invariants, so either route admin
+email edits through the same operation or make the field read-only there and
+document the operator procedure. Do not use a fragile save signal as the primary
+workflow; the service and database constraints must make the transition
+explicit and testable.
 
 A future custom-user migration may be reconsidered before broader profile,
 multi-email, organization, or identity-provider work. If those requirements make

@@ -137,8 +137,9 @@ business domains.
 ## Existing Authentication Foundation
 
 **IN PROGRESS / PLANNED:** The next independently testable slice is registration
-plus email verification, existing hybrid-JWT login/logout and `/me`, and minimal
-React UI. Its implementation contract is
+plus email verification and reverification after an authenticated email change,
+existing hybrid-JWT login/logout and `/me`, and minimal React UI. Its
+implementation contract is
 [ai-prompts/auth-registration-verification.md](ai-prompts/auth-registration-verification.md).
 Application code has not yet been implemented for this slice.
 
