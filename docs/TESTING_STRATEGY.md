@@ -146,26 +146,17 @@ These tests use real Django + real frontend build.
 
 # 5. CI Integration
 
-Backend tests already run in CI:
+CI builds each production image once and validates that exact artifact. The
+frontend image runs locked installation, Vitest, ESLint, and the production
+build; its runtime smoke checks also verify SPA, proxy, and dotfile-rejection
+behavior. The backend image runs pytest against disposable PostgreSQL, Django
+checks, migrations, and runtime health checks. Trivy scans both images.
 
-- Build Docker
-- Start services
-- Run pytest
+Successful `develop` pushes publish and deploy the validated images by immutable
+digest. Pull requests and `main` pushes validate without deployment. See
+[BUILD_DEPLOY.md](BUILD_DEPLOY.md) for the canonical trigger matrix.
 
-Frontend tests will be added:
-
-Example CI additions:
-
-- name: Install frontend dependencies
-  run: npm ci --prefix frontend
-
-- name: Run frontend unit tests
-  run: npm run test --prefix frontend
-
-- name: Run E2E tests
-  run: npm run e2e --prefix frontend
-
-CI must fail if any layer fails.
+Browser E2E tests remain planned rather than current CI behavior.
 
 ---
 

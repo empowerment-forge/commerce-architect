@@ -28,6 +28,8 @@ Railway frontend: NGINX + React assets
 ## Boundaries
 
 - `frontend/` owns the React/Vite browser application and NGINX public edge.
+- NGINX rejects dotfile paths before SPA fallback and keeps `/api/`, `/admin/`,
+  and `/static/` routing explicit.
 - `backend/accounts/` owns authentication and remains independent of commerce
   domains.
 - `backend/catalog/` owns the current commerce-domain API.

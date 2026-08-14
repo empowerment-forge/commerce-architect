@@ -36,5 +36,6 @@ npm run build
 `frontend/Dockerfile` runs tests, lint, and the production build in Node 24,
 then copies only `dist` into NGINX. NGINX serves the SPA and proxies `/api/`,
 `/admin/`, and `/static/` to Django over Railway private networking. Browser API
-requests therefore remain same-origin. See
+requests therefore remain same-origin. Requests for dotfiles are rejected
+instead of falling through to the SPA. See
 [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).

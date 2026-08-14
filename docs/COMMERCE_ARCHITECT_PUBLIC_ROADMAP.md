@@ -367,8 +367,9 @@ A disposable `pip-audit` scan of `backend/requirements.txt` found no known
 Python vulnerabilities. The requirements file is not fully deterministic:
 most direct dependencies are not pinned exactly and transitive versions are not
 locked. A repeatable Python audit and a reviewed lock or constraints strategy
-remain planned work. Weekly Dependabot checks now cover frontend npm, backend
-pip, and GitHub Actions dependencies.
+remain planned work. Weekly Dependabot checks target `develop` for frontend npm,
+backend pip, and GitHub Actions dependencies. Routine minor/patch updates are
+grouped per ecosystem; major updates require separate explicit review.
 
 ### Django Deployment Posture
 

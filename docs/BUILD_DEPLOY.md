@@ -32,7 +32,9 @@ Railway never runs the Vite development server.
 NGINX listens on Railway's `PORT`, serves the SPA, and proxies `/api/`,
 `/admin/`, and `/static/` to the backend through Railway private networking.
 The browser client therefore uses same-origin API URLs without a build-time
-backend origin.
+backend origin. A higher-priority regex location returns 404 for dotfile paths,
+including nested paths, so hidden-file probes never receive the SPA fallback or
+reach Django. CI checks representative root and nested dotfile requests.
 
 ### Backend
 
@@ -86,6 +88,12 @@ The frontend image runs its tests, lint, and production build. The backend image
 runs pytest against disposable PostgreSQL, ordinary Django checks, production
 deployment checks, migration checks, and an image smoke test. Secrets are not
 baked into either artifact.
+
+Dependabot targets `develop` weekly for npm, pip, and GitHub Actions. Routine
+minor and patch updates are grouped per ecosystem; major-version updates remain
+explicit review work. Dependency manifests intentionally express compatible
+ranges, so CI's exact-image validation remains the release gate while a Python
+lock/constraints decision remains open.
 
 ## Deployment credentials and boundaries
 
