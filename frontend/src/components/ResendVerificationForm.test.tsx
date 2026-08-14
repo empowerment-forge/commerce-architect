@@ -41,4 +41,14 @@ describe("ResendVerificationForm", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to request another verification email");
   });
+
+  it("keeps the full form collapsed until recovery is requested", async () => {
+    const user = userEvent.setup();
+    render(<ResendVerificationForm collapsed initialEmail="alice@example.com" />);
+
+    expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Didn't receive the email? Resend verification" }));
+
+    expect(screen.getByLabelText("Email address")).toHaveValue("alice@example.com");
+  });
 });

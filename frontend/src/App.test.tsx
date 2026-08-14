@@ -71,6 +71,8 @@ describe("App authentication flow", () => {
     await user.click(screen.getByRole("button", { name: "Register" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
+    expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Didn't receive the email? Resend verification" }));
     expect(screen.getByLabelText("Email address")).toHaveValue("alice@example.com");
     expect(screen.getByRole("button", { name: "Resend verification email" })).toBeInTheDocument();
   });
@@ -183,7 +185,7 @@ describe("App authentication flow", () => {
     await user.click(screen.getByRole("button", { name: "Login" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Verify your current email");
-    expect(screen.getByRole("button", { name: "Resend verification email" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Didn't receive the email? Resend verification" })).toBeInTheDocument();
   });
 
   it("shows a useful bad-credentials error", async () => {
@@ -224,10 +226,18 @@ describe("App authentication flow", () => {
     await user.click(screen.getByRole("button", { name: "Login" }));
     expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
     expect(screen.getByText("Verified")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Account settings" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("New email")).not.toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Change email"), "new@example.com");
+    await user.click(screen.getByRole("button", { name: "Account settings" }));
+    expect(screen.getByRole("heading", { name: "Account settings" })).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Change email" }));
+    await user.type(screen.getByLabelText("New email"), "new@example.com");
     await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
     expect(await screen.findByText("new@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Email changed");
+    await user.click(screen.getByRole("button", { name: "Back to account" }));
     expect(screen.getByText("Not verified")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Logout" }));
@@ -267,11 +277,49 @@ describe("App authentication flow", () => {
     render(<App />);
     expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Change email"), "new@example.com");
+    await user.click(screen.getByRole("button", { name: "Account settings" }));
+    await user.click(screen.getByRole("button", { name: "Change email" }));
+    await user.type(screen.getByLabelText("New email"), "new@example.com");
     await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be sent");
     expect(screen.getByText("new@example.com")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to account" }));
     expect(screen.getByText("Not verified")).toBeInTheDocument();
+  });
+
+  it("clears a failed email-change error after a corrected successful change", async () => {
+    let attempts = 0;
+    mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response(verifiedUser),
+      "/api/auth/change-email/": () => {
+        attempts += 1;
+        return attempts === 1
+          ? response({ email: ["A user with that email already exists."] }, false, 400)
+          : response({
+              email: "corrected@example.com",
+              email_verified: false,
+              detail: "Email changed. Check the new address to verify it.",
+            });
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Account settings" }));
+    await user.click(screen.getByRole("button", { name: "Change email" }));
+
+    await user.type(screen.getByLabelText("New email"), "taken@example.com");
+    await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
+
+    await user.clear(screen.getByLabelText("New email"));
+    await user.type(screen.getByLabelText("New email"), "corrected@example.com");
+    await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Email changed");
+    expect(screen.queryByText("A user with that email already exists.")).not.toBeInTheDocument();
+    expect(screen.getByText("corrected@example.com")).toBeInTheDocument();
   });
 });

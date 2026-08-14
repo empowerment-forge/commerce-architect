@@ -5,10 +5,15 @@ import { resendVerification } from "../api/auth";
 import { ApiError } from "../api/client";
 
 type ResendVerificationFormProps = {
+  collapsed?: boolean;
   initialEmail?: string;
 };
 
-export function ResendVerificationForm({ initialEmail = "" }: ResendVerificationFormProps) {
+export function ResendVerificationForm({
+  collapsed = false,
+  initialEmail = "",
+}: ResendVerificationFormProps) {
+  const [open, setOpen] = useState(!collapsed);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,6 +35,18 @@ export function ResendVerificationForm({ initialEmail = "" }: ResendVerification
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!open) {
+    return (
+      <button
+        className="mt-4 text-sm font-medium text-blue-700 underline"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        Didn&apos;t receive the email? Resend verification
+      </button>
+    );
   }
 
   return (
