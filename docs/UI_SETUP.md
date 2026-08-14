@@ -210,9 +210,8 @@ A normal frontend session is:
    Podman Compose command).
 4. Stop the stack with the Compose `down` command for the selected runtime.
 
-This local development container is not a production frontend deployment
-decision. A future production environment may build the React application and
-host the resulting assets through a dedicated frontend or static hosting
-provider instead of running Vite. Local containerized PostgreSQL likewise does
-not determine the production database deployment model; managed PostgreSQL
-remains a valid future option.
+This local development container is not the hosted frontend runtime. Hosted
+development builds React once and serves `dist` through NGINX; same-origin
+`/api/`, `/admin/`, and `/static/` requests are proxied privately to Django.
+Railway-managed PostgreSQL is persistent hosted state. See
+[ARCHITECTURE.md](ARCHITECTURE.md).

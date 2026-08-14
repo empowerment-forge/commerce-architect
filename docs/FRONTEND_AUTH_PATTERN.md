@@ -4,10 +4,11 @@
 
 ## Overview
 
-This document defines the official authentication pattern for the React SPA
-communicating with the Django REST backend.
-
-This pattern is mandatory for all future frontend development.
+This document is the **planned design contract** for the React SPA communicating
+with Django. The backend hybrid JWT endpoints exist; the complete frontend
+login, refresh, and authenticated-state lifecycle described below is not yet
+implemented. New authentication UI should follow this contract unless an
+approved architecture change supersedes it.
 
 ---
 
@@ -44,7 +45,7 @@ Hybrid JWT Strategy:
 
 # Authenticated API Calls
 
-Frontend uses Axios interceptor:
+The planned frontend client uses a coordinated request wrapper or interceptor:
 
 - Reads access token from auth store
 - Adds:
@@ -113,4 +114,4 @@ Future improvements may include:
 - MFA enforcement
 - Device/session management UI
 
-This document defines Phase 1 standard.
+This document defines the Phase 1 target, not a claim that the UI is complete.
