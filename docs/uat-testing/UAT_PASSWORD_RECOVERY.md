@@ -277,20 +277,22 @@ inside the race window manually.
 - Railway request → delivered email → safe link → reset → new-password login
   succeeds without provider-specific application code.
 
-**Result:** [ ] PASS [ ] FAIL [x] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
--
+- Deployed Railway acceptance completed successfully, including real recovery
+  email delivery through Resend and password reset/login on desktop and iPhone.
 
 ## UAT Summary
 
 - Total scenarios: 13
-- Passed: 12 (Scenarios 1–12)
+- Passed: 13 (Scenarios 1–13)
 - Failed: 0
-- Blocked: 1 (Scenario 13, pending Railway deployment and real Resend acceptance)
+- Blocked: 0
 - Tester:
-- Date:
-- Branch: `feature/auth-password-recovery`
+- Date: 2026-08-15
+- Branch: `develop`
 - Commit:
-- Notes: Scenario 13 will be completed after merge and deployment.
+- Notes: Overall UAT 13/13 PASS. Deployed Railway acceptance and real Resend
+  delivery completed successfully.
