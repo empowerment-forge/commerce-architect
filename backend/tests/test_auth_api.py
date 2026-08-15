@@ -2,7 +2,7 @@ import pytest
 from django.core import mail
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.test import Client
+from django.test import Client, override_settings
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from datetime import timedelta
@@ -169,15 +169,26 @@ def test_registration_rejects_duplicate_email_case_insensitively(client):
 
 
 @pytest.mark.django_db
-def test_registration_applies_django_password_validation(client):
+@pytest.mark.parametrize(
+    "password, expected_message",
+    [
+        ("Ab1!", "at least 8 characters"),
+        ("password", "too common"),
+        ("123456789", "entirely numeric"),
+    ],
+)
+def test_registration_applies_each_configured_password_validator(
+    client, password, expected_message
+):
     response = client.post(
         "/api/auth/register/",
-        registration_payload(password="password"),
+        registration_payload(password=password),
         content_type="application/json",
     )
 
     assert response.status_code == 400
     assert "password" in response.json()
+    assert any(expected_message in message for message in response.json()["password"])
     assert not User.objects.filter(username="newuser").exists()
 
 
@@ -812,6 +823,18 @@ def test_access_token_works_for_protected_endpoint(client):
 
 
 @pytest.mark.django_db
+def test_malformed_access_token_is_rejected_without_credential_detail(client):
+    response = client.get(
+        "/api/auth/me/",
+        HTTP_AUTHORIZATION="Bearer not-a-valid-jwt",
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "token_not_valid"
+    assert "not-a-valid-jwt" not in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_expired_access_is_rejected_while_refresh_cookie_issues_replacement(client):
     user = User.objects.create_user(username="lifecycleuser", password="SecurePass123!")
     login_response = client.post(
@@ -953,6 +976,32 @@ def test_password_recovery_request_validates_email_and_throttles(client):
     ]
     assert [item.status_code for item in responses[:4]] == [202] * 4
     assert responses[4].status_code == 429
+
+
+@pytest.mark.django_db
+@override_settings(
+    REST_FRAMEWORK={
+        "DEFAULT_AUTHENTICATION_CLASSES": (
+            "rest_framework_simplejwt.authentication.JWTAuthentication",
+        ),
+        "DEFAULT_THROTTLE_RATES": {"password_recovery_request": "5/minute"},
+        "NUM_PROXIES": 1,
+    }
+)
+def test_password_recovery_throttle_ignores_spoofed_forwarding_hops(client):
+    cache.clear()
+    responses = [
+        client.post(
+            "/api/auth/password-reset/request/",
+            {"email": f"unknown{index}@example.com"},
+            content_type="application/json",
+            HTTP_X_FORWARDED_FOR=f"198.51.100.{index}, 203.0.113.10",
+        )
+        for index in range(6)
+    ]
+
+    assert [item.status_code for item in responses[:5]] == [202] * 5
+    assert responses[5].status_code == 429
 
 
 @pytest.mark.django_db
