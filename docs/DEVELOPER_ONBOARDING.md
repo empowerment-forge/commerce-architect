@@ -117,7 +117,8 @@ documented as current commands yet.
     the frontend container. The exact commands are in the developer command
     quick reference in [DOCKER_SETUP.md](DOCKER_SETUP.md).
 5.  Make focused changes on the appropriate feature branch, follow the repository
-    pull-request workflow, and keep CI green.
+    pull-request workflow, keep CI green, and report validation according to
+    [VALIDATION_STANDARDS.md](VALIDATION_STANDARDS.md).
 
 ## Architectural Philosophy
 
