@@ -147,6 +147,8 @@ production.
 | `AUTH_REQUIRE_VERIFIED_EMAIL` | `true` in Compose to exercise the full flow | Explicit policy; defaults to `false` outside Compose for existing-account compatibility |
 | `AUTH_EMAIL_VERIFICATION_TTL_SECONDS` | `86400` | Positive token lifetime |
 | `AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS` | `60` | Non-negative resend cooldown |
+| `AUTH_PASSWORD_RECOVERY_TTL_SECONDS` | `1800` | Positive recovery-token lifetime |
+| `AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS` | `60` | Non-negative per-account recovery cooldown |
 | `AUTH_FRONTEND_BASE_URL` | `http://localhost:5173` | Required absolute HTTPS URL in production |
 | `EMAIL_BACKEND` | First-party readable console backend | Required delivery-capable backend in production |
 | `DEFAULT_FROM_EMAIL` | Local non-delivery sender | Required non-local sender in production |
@@ -189,6 +191,8 @@ both be enabled.
 
 Production rejects missing/insecure frontend URL, console/dummy/in-memory email
 backends, a local sender, incomplete SMTP credentials, and invalid SMTP options.
+Password recovery reuses the same mailer and frontend base URL; no additional
+provider credential or SDK is required.
 
 ## HTTPS and Proxy Variables
 

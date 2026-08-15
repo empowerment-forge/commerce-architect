@@ -1,8 +1,7 @@
 # Implementation Assignment: Password Recovery
 
-> **Status: design approved for implementation planning.** This document defines
-> the next authentication slice. It does not describe behavior that is already
-> implemented.
+> **Status: implemented on `feature/auth-password-recovery`.** This document is
+> the acceptance contract for the password-recovery slice.
 
 ## Objective
 
@@ -68,21 +67,23 @@ Use two modest protections without adding CAPTCHA:
   returning ordinary HTTP 429 without account-specific information.
 
 Mail-delivery failure must be logged without recipient, raw token, credentials,
-or account-disclosing response detail. The public response remains generic.
+or account-disclosing response detail. The public response remains generic. If
+delivery fails, clear the just-issued digest and restore the prior `last_sent_at`
+under a lock, but only if that issue still owns the current digest. This avoids
+stranding the account behind cooldown without overwriting a concurrent reissue.
 
 ## Reset token strategy
 
 ### Recommendation
 
 Add one accounts-owned `PasswordRecoveryState` row per user rather than using
-Django's `PasswordResetTokenGenerator` alone. Suggested fields are:
+Django's `PasswordResetTokenGenerator` alone. Its fields are:
 
 - UUID primary key used as the public recovery identifier;
 - one-to-one `user` relationship;
 - `normalized_email` captured at issuance;
 - `token_digest` (64-character SHA-256/HMAC digest), never the raw token;
 - `token_created_at`, `last_sent_at`, and nullable `consumed_at`;
-- integer `session_generation`, defaulting to zero; and
 - normal created/updated timestamps.
 
 Issue at least 256 bits with `secrets.token_urlsafe(32)`. Derive the stored digest
@@ -117,6 +118,8 @@ comparison; do not reimplement password hashing.
   timestamp; every previous link becomes invalid immediately.
 - **Cooldown:** an eligible account receives at most one new message per
   configured 60-second interval. The public response never reveals cooldown.
+- **Failed delivery:** the failed issue is cleared and its previous cooldown
+  timestamp restored when it is still current, allowing immediate safe retry.
 - **Single use:** successful confirmation clears the digest, records
   `consumed_at`, changes the password, and increments `session_generation` in
   one transaction.
@@ -276,17 +279,18 @@ or unrelated authentication surfaces.
 - Add positive TTL/cooldown settings and a scoped DRF throttle configuration.
 - Add request/confirm serializers and accounts-owned transactional services for
   issue, send, validate, consume, and session revocation.
-- Use `transaction.on_commit()` for sending, preserving a retryable state when
-  delivery fails while keeping the public response generic.
+- Send after the issue transaction and conditionally roll back the failed issue
+  reservation under a second transaction, preserving immediate retry while
+  keeping the public response generic.
 - Extend `change_email()` to invalidate recovery state in the same transaction.
 - Add generation claims and validation to token obtain/refresh serializers.
 - Keep all response translation in views and lifecycle invariants in services.
 - Add frontend API functions and the two minimal recovery UI states/pages.
 
-## Test and future UAT contract
+## Test and UAT contract
 
-Create `docs/uat-testing/UAT_PASSWORD_RECOVERY.md` during implementation. It
-must cover at least:
+[uat-testing/UAT_PASSWORD_RECOVERY.md](../uat-testing/UAT_PASSWORD_RECOVERY.md)
+is the practical acceptance script. It covers:
 
 - known active verified account and unknown-address requests with
   indistinguishable public responses;
@@ -332,10 +336,34 @@ Keep out of this slice:
   the accounts service. The password-bound digest invalidates reset links even
   when an external/admin change bypasses it, but session generation requires an
   explicit hook or service call for full refresh revocation.
-- **Delivery failure:** retaining an outstanding token whose email failed is
-  acceptable because the token is unknown; cooldown policy should allow a safe
-  retry without exposing the failure.
+- **Delivery failure:** the implementation conditionally releases the failed
+  issue and cooldown reservation, allowing immediate retry without exposing the
+  failure or disturbing a concurrent replacement.
 
-No unresolved question changes the recommended public API or token model; the
-implementation must settle proxy throttle configuration and admin-change session
-revocation tests before acceptance.
+Throttle identity uses DRF's direct `REMOTE_ADDR` locally. In production it
+trusts exactly one forwarded proxy hop only when
+`DJANGO_TRUST_FORWARDED_PROTO=true`, matching the already-established Railway
+proxy assumption. A topology with another proxy hop requires a reviewed setting
+change; this is modest abuse control, not a hard distributed rate limit.
+
+Direct/admin password changes invalidate outstanding recovery links through the
+password-hash-bound digest, but do not increment `session_generation`. There is
+no existing Commerce Architect application hook that safely covers every such
+change. Full refresh-session revocation for authenticated/admin password changes
+is deferred to a coherent account-security slice rather than adding signals or
+broad admin customization here.
+
+## Account-wide security state boundary
+
+`session_generation` does not belong to recovery state. It is owned by a
+separate accounts-owned `AccountSecurityState` with only:
+
+- a one-to-one `user` relationship;
+- integer `session_generation`, default zero; and
+- created/updated timestamps.
+
+This boundary makes session revocation reusable by later authenticated password
+changes, log-out-all-sessions, compromised-account response, or security-policy
+changes without making those concerns depend on a recovery record. No
+speculative MFA or policy fields are included. `PasswordRecoveryState` remains
+strictly recovery lifecycle state.

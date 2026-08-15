@@ -18,6 +18,8 @@ SECURITY_ENV_NAMES = (
     "AUTH_REQUIRE_VERIFIED_EMAIL",
     "AUTH_EMAIL_VERIFICATION_TTL_SECONDS",
     "AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS",
+    "AUTH_PASSWORD_RECOVERY_TTL_SECONDS",
+    "AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS",
     "AUTH_FRONTEND_BASE_URL",
     "EMAIL_BACKEND",
     "DEFAULT_FROM_EMAIL",
@@ -56,6 +58,9 @@ print(json.dumps({
     "require_verified_email": settings.AUTH_REQUIRE_VERIFIED_EMAIL,
     "verification_ttl": settings.AUTH_EMAIL_VERIFICATION_TTL_SECONDS,
     "resend_cooldown": settings.AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS,
+    "password_recovery_ttl": settings.AUTH_PASSWORD_RECOVERY_TTL_SECONDS,
+    "password_recovery_cooldown": settings.AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS,
+    "api_num_proxies": settings.REST_FRAMEWORK["NUM_PROXIES"],
     "auth_frontend_base_url": settings.AUTH_FRONTEND_BASE_URL,
     "email_backend": settings.MAILERS["default"]["BACKEND"],
     "mailer_options": {
@@ -122,6 +127,9 @@ def test_development_loads_with_explicit_safe_environment():
     assert settings["require_verified_email"] is False
     assert settings["verification_ttl"] == 86400
     assert settings["resend_cooldown"] == 60
+    assert settings["password_recovery_ttl"] == 1800
+    assert settings["password_recovery_cooldown"] == 60
+    assert settings["api_num_proxies"] == 0
     assert settings["auth_frontend_base_url"] == "http://localhost:5173"
     assert settings["email_backend"] == "accounts.mail.ReadableConsoleEmailBackend"
     assert settings["mailer_options"] == {}
@@ -330,6 +338,7 @@ def test_explicit_production_enables_secure_defaults_and_proxy_support():
     assert settings["ssl_redirect"] is True
     assert settings["hsts_seconds"] == 0
     assert settings["proxy_ssl_header"] == ["HTTP_X_FORWARDED_PROTO", "https"]
+    assert settings["api_num_proxies"] == 1
     assert settings["require_verified_email"] is True
     assert settings["auth_frontend_base_url"] == "https://commerce.example"
 
@@ -388,3 +397,22 @@ def test_verification_intervals_are_validated():
 
     assert result.returncode != 0
     assert "TTL_SECONDS must be positive" in result.stderr
+
+
+def test_password_recovery_intervals_are_validated():
+    base = {
+        "COMMERCE_ENV": "development",
+        "DJANGO_SECRET_KEY": "django-insecure-development-only-not-for-production",
+    }
+    invalid_ttl = run_settings_probe(
+        **base,
+        AUTH_PASSWORD_RECOVERY_TTL_SECONDS="0",
+    )
+    invalid_cooldown = run_settings_probe(
+        **base,
+        AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS="-1",
+    )
+    assert invalid_ttl.returncode != 0
+    assert "AUTH_PASSWORD_RECOVERY_TTL_SECONDS must be positive" in invalid_ttl.stderr
+    assert invalid_cooldown.returncode != 0
+    assert "AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS cannot be negative" in invalid_cooldown.stderr

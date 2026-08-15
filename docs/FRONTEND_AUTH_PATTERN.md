@@ -17,10 +17,19 @@ fetch-based API client.
 - Logout calls the backend and clears frontend state even when backend cleanup
   fails.
 
-The UI provides registration, login, verification result, authenticated `/me`,
-email change/reverification, and logout states. Verification links land on the
-frontend, which removes token query parameters from history and explicitly POSTs
-them to the backend so mail-link scanners do not consume tokens through GET.
+The UI provides registration, login, password recovery, verification result,
+authenticated `/me`, email change/reverification, and logout states. Login has
+a secondary `Forgot password?` view whose successful request always shows the
+same check-email message. Recovery links land on `/reset-password`; the page
+captures the UUID/token in component memory, immediately removes the query from
+browser history, and changes state only through POST. Password mismatch is
+checked locally, while Django validator feedback remains authoritative. Reset
+success clears in-memory authentication state and returns to login without
+automatically issuing credentials.
+
+Verification links follow the same scanner-safe pattern: the frontend removes
+token query parameters from history and explicitly POSTs them to the backend so
+mail-link scanners do not consume tokens through GET.
 
 Refresh cookies remain `HttpOnly`, `SameSite=Strict`, scoped to `/api/auth/`, and
 `Secure` outside local development. The browser and API remain same-origin in

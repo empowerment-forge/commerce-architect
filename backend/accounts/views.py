@@ -1,29 +1,36 @@
+import logging
+
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.db import IntegrityError
 from rest_framework import permissions, status
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.serializers import (
-    TokenObtainPairSerializer,
-    TokenRefreshSerializer,
-)
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
 from .models import EmailVerification
 from .serializers import (
     ChangeEmailSerializer,
+    PasswordRecoveryConfirmSerializer,
+    PasswordRecoveryRequestSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
+    SessionTokenObtainPairSerializer,
+    SessionTokenRefreshSerializer,
     VerifyEmailSerializer,
 )
 from .services import (
     change_email,
+    consume_password_recovery,
     is_verified,
     normalize_email,
+    release_failed_password_recovery_delivery,
+    request_password_recovery,
     resend_verification,
     send_verification_email,
+    send_password_recovery_email,
     verification_metadata,
     verify_email,
 )
@@ -38,6 +45,10 @@ RESEND_DETAIL = (
     "If an eligible unverified account exists and the resend cooldown has elapsed, "
     "a verification email will be sent."
 )
+PASSWORD_RECOVERY_DETAIL = (
+    "If an eligible account exists, password recovery instructions will be sent."
+)
+logger = logging.getLogger(__name__)
 
 
 def set_refresh_cookie(response, refresh_token):
@@ -210,7 +221,7 @@ class TokenObtainCookieView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        serializer = TokenObtainPairSerializer(data=request.data)
+        serializer = SessionTokenObtainPairSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         response = Response(
@@ -229,7 +240,7 @@ class TokenRefreshCookieView(APIView):
         if not refresh_cookie:
             raise AuthenticationFailed("Refresh token cookie is missing.")
 
-        serializer = TokenRefreshSerializer(data={"refresh": refresh_cookie})
+        serializer = SessionTokenRefreshSerializer(data={"refresh": refresh_cookie})
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as exc:
@@ -315,3 +326,65 @@ class ChangeEmailView(APIView):
                 "detail": "Email changed. Check the new address to verify it.",
             }
         )
+
+
+class PasswordRecoveryRequestView(APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_recovery_request"
+
+    def post(self, request):
+        serializer = PasswordRecoveryRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = request_password_recovery(serializer.validated_data["email"])
+        if result.issued:
+            try:
+                send_password_recovery_email(result.issued)
+            except Exception:  # Mail backends may raise provider-specific exceptions.
+                logger.warning("Password recovery email delivery failed.")
+                release_failed_password_recovery_delivery(result.issued)
+        return Response(
+            {"detail": PASSWORD_RECOVERY_DETAIL},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class PasswordRecoveryConfirmView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = PasswordRecoveryConfirmSerializer(data=request.data)
+        if not serializer.is_valid():
+            if "code" in serializer.errors:
+                return Response(
+                    {
+                        "code": "invalid_or_expired_token",
+                        "detail": "This password reset link is invalid or expired.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            raise ValidationError(serializer.errors)
+        if not consume_password_recovery(
+            serializer.validated_data["uid"],
+            serializer.validated_data["token"],
+            serializer.validated_data["new_password"],
+        ):
+            return Response(
+                {
+                    "code": "invalid_or_expired_token",
+                    "detail": "This password reset link is invalid or expired.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        response = Response(
+            {
+                "code": "password_reset",
+                "detail": "Password changed. Please log in.",
+            }
+        )
+        response.delete_cookie(
+            key=REFRESH_COOKIE_NAME,
+            path=settings.REFRESH_COOKIE_PATH,
+            samesite=settings.REFRESH_COOKIE_SAMESITE,
+        )
+        return response

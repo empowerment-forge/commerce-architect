@@ -141,8 +141,9 @@ implemented. Its acceptance contract is
 
 Authentication and the broader account lifecycle remain important platform
 work, especially where required to secure and validate the hosted environment.
-The next active authentication slice is password recovery, governed by
-[ai-prompts/auth-password-recovery.md](ai-prompts/auth-password-recovery.md).
+Password recovery is implemented on its feature branch and governed by
+[ai-prompts/auth-password-recovery.md](ai-prompts/auth-password-recovery.md),
+pending its dedicated acceptance and integration cycle.
 The existing backend foundation includes:
 
 - Registration endpoint
@@ -155,13 +156,14 @@ The existing backend foundation includes:
 - Logout
 - Authenticated `/api/auth/me/` endpoint
 - Minimal frontend authentication/session UI
+- Enumeration-resistant password recovery with session-generation revocation
 
 The major incomplete areas are:
 
 - Broader password/account policy hardening
 - Broader adoption of the implemented single-flight access-token refresh/retry
   helper as future authenticated frontend operations are added
-- Password reset and recovery (active design slice)
+- Password recovery deployment acceptance and integration
 - MFA
 - Production security configuration
 - Guest-to-account lifecycle

@@ -51,6 +51,19 @@ describe("App authentication flow", () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === "/api/auth/refresh/")).toHaveLength(1);
   });
 
+  it("offers password recovery as a secondary login action with back navigation", async () => {
+    mockApi({ "/api/auth/refresh/": () => response({}, false, 401) });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Login | Register" }));
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }));
+    expect(screen.getByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to login" }));
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("clears authentication feedback when the panel is closed and reopened", async () => {
     mockApi({
       "/api/auth/refresh/": () => response({}, false, 401),

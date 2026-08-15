@@ -128,7 +128,8 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
 )
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
 
-if env_bool("DJANGO_TRUST_FORWARDED_PROTO", False):
+TRUST_FORWARDED_PROTO = env_bool("DJANGO_TRUST_FORWARDED_PROTO", False)
+if TRUST_FORWARDED_PROTO:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 REFRESH_COOKIE_SECURE = IS_PRODUCTION
@@ -143,6 +144,14 @@ AUTH_EMAIL_VERIFICATION_TTL_SECONDS = env_int(
 )
 AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = env_int(
     "AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS",
+    60,
+)
+AUTH_PASSWORD_RECOVERY_TTL_SECONDS = env_int(
+    "AUTH_PASSWORD_RECOVERY_TTL_SECONDS",
+    1800,
+)
+AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS = env_int(
+    "AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS",
     60,
 )
 AUTH_FRONTEND_BASE_URL = os.environ.get(
@@ -211,6 +220,12 @@ if AUTH_EMAIL_VERIFICATION_TTL_SECONDS <= 0:
 if AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS < 0:
     raise ImproperlyConfigured(
         "AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS cannot be negative."
+    )
+if AUTH_PASSWORD_RECOVERY_TTL_SECONDS <= 0:
+    raise ImproperlyConfigured("AUTH_PASSWORD_RECOVERY_TTL_SECONDS must be positive.")
+if AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS < 0:
+    raise ImproperlyConfigured(
+        "AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS cannot be negative."
     )
 
 if IS_PRODUCTION:
@@ -382,6 +397,12 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "password_recovery_request": "5/minute",
+    },
+    # Trust one forwarding hop only when the deployment explicitly trusts the
+    # platform proxy for the original HTTPS scheme; local clients use REMOTE_ADDR.
+    "NUM_PROXIES": 1 if TRUST_FORWARDED_PROTO else 0,
 }
 
 SIMPLE_JWT = {

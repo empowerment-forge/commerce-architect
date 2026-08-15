@@ -14,8 +14,10 @@ import type { AuthUser } from "./api/auth";
 import { ApiError, createAuthenticatedRequester, SessionExpiredError, SESSION_EXPIRED_MESSAGE } from "./api/client";
 import type { AuthenticatedRequester } from "./api/client";
 import { KnownEmailResend } from "./components/KnownEmailResend";
+import { PasswordRecoveryRequestForm } from "./components/PasswordRecoveryRequestForm";
 import { ResendVerificationForm } from "./components/ResendVerificationForm";
 import { ProductListPage } from "./pages/ProductListPage";
+import { PasswordResetPage } from "./pages/PasswordResetPage";
 import { VerificationPage } from "./pages/VerificationPage";
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -79,6 +81,7 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
   const [fieldErrors, setFieldErrors] = useState<RegistrationFieldErrors>({});
   const [registrationEmail, setRegistrationEmail] = useState<string | null>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [passwordRecoveryOpen, setPasswordRecoveryOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -132,6 +135,10 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
     }
   }
 
+  if (passwordRecoveryOpen) {
+    return <PasswordRecoveryRequestForm onCancel={() => setPasswordRecoveryOpen(false)} />;
+  }
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex justify-end">
@@ -173,6 +180,20 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
           {busy ? "Working…" : mode === "login" ? "Login" : "Register"}
         </button>
       </form>
+      {mode === "login" && (
+        <button
+          className="mt-4 text-sm font-medium text-blue-700 underline"
+          onClick={() => {
+            setError(null);
+            setMessage(null);
+            setRecoveryOpen(false);
+            setPasswordRecoveryOpen(true);
+          }}
+          type="button"
+        >
+          Forgot password?
+        </button>
+      )}
       {message && <p className="mt-4 text-sm text-emerald-700" role="status">{message}</p>}
       {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
       {registrationEmail ? (
@@ -381,6 +402,18 @@ function App() {
   }, [authenticatedRequest]);
 
   if (window.location.pathname === "/verify-email") return <VerificationPage />;
+  if (window.location.pathname === "/reset-password") {
+    return (
+      <PasswordResetPage
+        onReset={() => {
+          storeAccessToken(null);
+          setUser(null);
+          setVisiblePanel("auth");
+          setSessionMessage(null);
+        }}
+      />
+    );
+  }
 
   async function logout() {
     try {
