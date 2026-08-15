@@ -52,12 +52,15 @@ products API              register  ✅
                           refresh   ✅
                           logout    ✅
                           /me       ✅
+                          recovery  ✅
 ```
 
 The catalog has an end-to-end vertical slice that is visible in the browser.
-Authentication is now a complete first user-facing slice: registration, email
-verification, login, `/me`, email change/reverification, refresh restoration,
-and logout are connected through the React frontend.
+Authentication now has a complete first user-facing foundation: registration,
+email verification and resend, login, `/me`, email change/reverification,
+access-token refresh/retry, logout, and password recovery/reset are connected
+through the React frontend. Recovery revokes account-wide refresh sessions, and
+real SMTP delivery through Resend has passed deployed development acceptance.
 
 ## Current Major Capabilities
 
@@ -82,22 +85,24 @@ and logout are connected through the React frontend.
 - React Testing Library
 - Product listing UI
 - API integration for products
-- Minimal authentication UI and in-memory session state
+- Authentication and account-management UI with in-memory access-token state
+- Responsive Account actions across narrow and wider viewports
 
 ## Current Priority: Hosted-Development Operational Readiness
 
 Commerce Architect is deployed at
 [https://dev-commerce.empowerment-forge.com](https://dev-commerce.empowerment-forge.com)
 as an internet-facing, production-style **non-production** Railway environment.
-The current priority is making that working environment reproducible and
-recoverable while retaining HTTPS, non-production credentials, no real customer
-data, and hardened Django runtime settings.
+The current operational priority is making that working environment
+reproducible and observable while retaining HTTPS, non-production credentials,
+no real customer commerce data, and hardened Django runtime settings. The
+environment is not carrying revenue-critical production workloads.
 
-Additional commerce and business-domain development—including Orders,
-Inventory, Checkout, and Payments—is temporarily secondary. Priority returns
-to those domains only after the existing platform has been deployed securely,
-tested, operated, recovered, and updated successfully in the development
-deployment.
+Operational hardening should progress deliberately alongside useful
+business-domain modeling, design, and use-case exploration. Production
+readiness remains required before real customer or revenue-critical workloads,
+but every operational outcome is not a gate on continued exploration of
+Orders, Inventory, Checkout, Payments, and related commerce domains.
 
 The authoritative architecture and implementation guide for this milestone is
 [BUILD_DEPLOY.md](BUILD_DEPLOY.md). This roadmap defines priority and milestone
@@ -109,41 +114,42 @@ decisions and procedures.
 The runtime topology, frontend/backend production artifacts, NGINX same-origin
 routing, persistent private PostgreSQL, custom domain, HTTPS, migrations,
 health gates, image validation/scanning, and digest deployments are complete.
+Bare frontend proxy-prefix redirects are also covered against public leakage of
+internal scheme or port details.
 
-The broader operational-readiness milestone remains in progress until the team
-has:
+The practical priority order for the remaining operational-readiness work is:
 
-- Independently verified the documented clean-environment provisioning procedure.
-- Completed post-deployment and real-HTTPS authentication checks.
-- Established application and database rollback procedures.
-- Established useful logging, health visibility, monitoring, and alerting
-  without leaking sensitive data.
-- Completed remaining static/security and dynamic application gates beyond the
-  current dependency and container-image scanning.
-- Established OWASP-oriented application security testing and a repeatable
-  penetration-testing process for the internet-facing environment.
-- Protected sensitive data in the database, logs, backups, and configuration.
-- Defined backup policy and successfully tested restoration.
-- Documented launch, deployment, rollback, recovery, credential rotation, and
-  incident-oriented operational procedures.
-- Demonstrated that the environment can be securely built, deployed, tested,
-  operated, updated, rolled back, and recovered.
+1. Independently verify clean-environment provisioning and reproducibility.
+2. Establish useful logging, health visibility, monitoring, and alerting
+   without leaking sensitive data.
+3. Complete OWASP-oriented application security validation and establish
+   repeatable penetration/security testing for the internet-facing environment.
+4. Establish and exercise application and database rollback procedures.
+5. Define backup policy and successfully test database restoration.
 
-Only after these outcomes are met does priority return to Orders and other
-business domains.
+Rollback and backup/restoration are required operational capabilities, not
+optional work. Their urgency increases substantially before production use and
+especially before revenue or customer data depends on the platform. Broader
+launch, recovery, credential-rotation, incident-response, and sensitive-data
+procedures remain part of the path from the current production-style
+non-production environment to production readiness.
 
 ## Existing Authentication Foundation
 
-**COMPLETE:** The independently testable registration, email verification and
-reverification, hybrid-JWT login/logout and `/me`, and minimal React UI slice is
-implemented. Its acceptance contract is
+**COMPLETE:** The independently testable user-facing foundation includes
+registration, email verification and resend, authenticated email change and
+reverification, hybrid-JWT login/logout and `/me`, access-token refresh/retry,
+and password recovery/reset. Its registration and verification acceptance
+contract is
 [ai-prompts/auth-registration-verification.md](ai-prompts/auth-registration-verification.md).
 
 Authentication and the broader account lifecycle remain important platform
 work, especially where required to secure and validate the hosted environment.
-Password recovery is implemented on its feature branch and governed by
-[ai-prompts/auth-password-recovery.md](ai-prompts/auth-password-recovery.md),
-pending its dedicated acceptance and integration cycle.
+Password recovery is governed by
+[ai-prompts/auth-password-recovery.md](ai-prompts/auth-password-recovery.md) and
+is complete at milestone `milestone/auth-password-recovery`, including real
+Resend delivery, Railway acceptance, and
+[13/13 UAT PASS](uat-testing/UAT_PASSWORD_RECOVERY.md).
 The existing backend foundation includes:
 
 - Registration endpoint
@@ -155,17 +161,17 @@ The existing backend foundation includes:
 - Refresh rotation and blacklisting
 - Logout
 - Authenticated `/api/auth/me/` endpoint
-- Minimal frontend authentication/session UI
-- Enumeration-resistant password recovery with session-generation revocation
+- Frontend authentication, recovery, and account-management UI
+- Enumeration-resistant, expiring, single-use password recovery with cooldowns
+- Account-wide session-generation revocation after password reset
 
 The major incomplete areas are:
 
 - Broader password/account policy hardening
 - Broader adoption of the implemented single-flight access-token refresh/retry
   helper as future authenticated frontend operations are added
-- Password recovery deployment acceptance and integration
 - MFA
-- Production security configuration
+- Further production-oriented account-security validation and hardening
 - Guest-to-account lifecycle
 
 The implemented slice retains Django's stock `User` with accounts-owned email
@@ -174,24 +180,19 @@ a separate risk-managed plan if broader identity requirements later demand it.
 
 ## Supporting Workstreams
 
-These workstreams support the deployment milestone or remain queued behind it.
+These workstreams support operational readiness or future product development.
 Capabilities listed as future work do not describe current repository behavior.
 
 ### Authentication / Account Architecture
 
-- Assess and settle account-lifecycle responsibilities and token/session
-  strategy before building additional user-facing authentication work.
-- Complete backend account-lifecycle and security capabilities, beginning with
-  password-policy hardening tracked in
-  [issue #4](https://github.com/empowerment-forge/commerce-architect/issues/4),
-  followed by the selected email verification, recovery, and lifecycle support.
-- Connect React to authentication and session state. The primary frontend slice
-  is tracked in
-  [issue #5](https://github.com/empowerment-forge/commerce-architect/issues/5),
-  with concurrent refresh coordination tracked separately in
-  [issue #6](https://github.com/empowerment-forge/commerce-architect/issues/6).
-- Complete coherent registration, login, logout, recovery, and verification
-  flows, then add the selected MFA and stronger account-security capabilities.
+- Preserve and extend the coherent registration, verification, login, logout,
+  recovery, and account-management foundation as new authenticated operations
+  are introduced.
+- Continue broader password/account-policy hardening, then add selected MFA and
+  stronger account-security capabilities through separately scoped work.
+- Design the guest-to-account lifecycle with the future checkout and orders
+  domains rather than treating the current identity foundation as permanently
+  complete.
 
 ### Developer + Adopter Experience
 
@@ -208,33 +209,35 @@ Capabilities listed as future work do not describe current repository behavior.
   operations.
 - Reduce developer onboarding friction while keeping setup reproducible and
   understandable.
+- Use the canonical
+  [validation and PR reporting standard](VALIDATION_STANDARDS.md) to distinguish
+  automated checks, CI, human/UAT, and deployed acceptance.
 - Define the production adoption and bootstrap workflow.
 - Progressively automate configuration, deployment, domain and TLS setup,
   health verification, and operational startup where appropriate.
 
-These workflow documents and commands are planned; they do not exist as a
-standardized experience today.
+The broader workflow documents and command surface remain planned; they do not
+exist as a standardized experience today.
 
 ### Public Repository Readiness
 
 Public repository readiness is a top near-term priority, not a post-product
-cleanup task. This workstream includes:
+cleanup task. The license map, contribution guide, security policy, and current
+public-facing maturity language exist. Remaining work includes:
 
 - A full repository and history secret/privacy audit
-- A licensing decision
-- `CONTRIBUTING.md`
-- `SECURITY.md`
-- Accurate public-facing maturity and status language
 - Issue and contributor hygiene
 - A final repository visibility review
 
-### Deferred Product Work and Supporting Hardening
+### Product Work and Supporting Hardening
 
-- After the deployment milestone, return to orders, checkout, payments, and the
-  guest-to-account flow represented by
+- Continue modeling and use-case exploration for orders, checkout, payments,
+  and the guest-to-account flow represented by
   [issue #9](https://github.com/empowerment-forge/commerce-architect/issues/9).
-- Harden production deployment and security. Production Django settings are
-  tracked in
+- Sequence implementation responsibly alongside the prioritized operational
+  hardening above; production use still requires the remaining readiness work.
+- Continue production deployment and security hardening. Production Django
+  settings are tracked in
   [issue #7](https://github.com/empowerment-forge/commerce-architect/issues/7),
   and deterministic Python builds in
   [issue #8](https://github.com/empowerment-forge/commerce-architect/issues/8).
@@ -245,10 +248,9 @@ roadmap records only how they fit into the larger implementation sequence.
 ## Future Commerce Work
 
 Deployment and authentication are foundational work, not the platform's
-ultimate product goal. Once the production-style development deployment
-milestone is complete and the identity foundation is sufficient for its secure
-operation, development should return to broader commerce capabilities,
-including:
+ultimate product goal. Business-domain modeling, design, and use-case work can
+continue while operational hardening progresses. Implementation should return
+deliberately to broader commerce capabilities, including:
 
 - Orders domain
 - Checkout
