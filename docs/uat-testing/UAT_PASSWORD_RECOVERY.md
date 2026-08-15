@@ -18,8 +18,12 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 
 **Expected**
 
-- Recovery is a secondary login action with one email field.
+- `Forgot password?` and `Need another verification email?` are visually
+  distinct secondary actions with spacing and a subtle divider.
+- Recovery remains a secondary login action with one email field.
 - Back returns to a clean Login view without stale feedback.
+- A normal logged-out visit to `/` keeps the authentication panel hidden until
+  `Login | Register` is selected.
 
 **Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
 
@@ -159,6 +163,9 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 **Expected**
 
 - Success says `Password changed. Please log in.` and returns/offers Login.
+- `Return to login` opens the existing Commerce Architect Login panel directly,
+  with Login selected and its form immediately ready; it does not land on a
+  hidden-panel home state.
 - No automatic login occurs and local authentication state is empty.
 - Old password fails; new password succeeds.
 

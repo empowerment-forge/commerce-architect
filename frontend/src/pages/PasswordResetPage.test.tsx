@@ -71,7 +71,7 @@ describe("PasswordResetPage", () => {
     await user.type(screen.getByLabelText("Confirm password"), "NewSecure123!");
     await user.click(screen.getByRole("button", { name: "Change password" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Please log in");
-    expect(screen.getByRole("link", { name: "Return to login" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Return to login" })).toHaveAttribute("href", "/login");
     expect(onReset).toHaveBeenCalledTimes(1);
     expect(storageSet).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/password-reset/confirm/", expect.objectContaining({

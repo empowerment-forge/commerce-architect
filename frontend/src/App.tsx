@@ -148,6 +148,7 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
         {(["login", "register"] as const).map((item) => (
           <button
             aria-label={`Show ${item} form`}
+            aria-pressed={mode === item}
             className={`rounded-md px-4 py-2 text-sm font-medium ${mode === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
             key={item}
             onClick={() => { setMode(item); setError(null); setMessage(null); setFieldErrors({}); setRegistrationEmail(null); setRecoveryOpen(false); }}
@@ -180,29 +181,43 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
           {busy ? "Working…" : mode === "login" ? "Login" : "Register"}
         </button>
       </form>
-      {mode === "login" && (
-        <button
-          className="mt-4 text-sm font-medium text-blue-700 underline"
-          onClick={() => {
-            setError(null);
-            setMessage(null);
-            setRecoveryOpen(false);
-            setPasswordRecoveryOpen(true);
-          }}
-          type="button"
-        >
-          Forgot password?
-        </button>
-      )}
       {message && <p className="mt-4 text-sm text-emerald-700" role="status">{message}</p>}
       {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
       {registrationEmail ? (
         <KnownEmailResend email={registrationEmail} />
+      ) : recoveryOpen ? (
+        <ResendVerificationForm onCancel={() => setRecoveryOpen(false)} />
+      ) : mode === "login" ? (
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <button
+            className="text-sm font-medium text-blue-700 underline"
+            onClick={() => {
+              setError(null);
+              setMessage(null);
+              setPasswordRecoveryOpen(true);
+            }}
+            type="button"
+          >
+            Forgot password?
+          </button>
+          <span className="flex items-center gap-4">
+            <span aria-hidden="true" className="h-4 border-l border-slate-300" />
+            <button
+              className="text-sm font-medium text-blue-700 underline"
+              onClick={() => {
+                setError(null);
+                setMessage(null);
+                setRecoveryOpen(true);
+              }}
+              type="button"
+            >
+              Need another verification email?
+            </button>
+          </span>
+        </div>
       ) : (
         <ResendVerificationForm
-          collapsed={!recoveryOpen}
-          key={recoveryOpen ? "recovery-open" : "recovery-closed"}
-          onCancel={() => setRecoveryOpen(false)}
+          collapsed
           triggerLabel="Need another verification email?"
         />
       )}
@@ -359,7 +374,9 @@ function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [restoring, setRestoring] = useState(true);
-  const [visiblePanel, setVisiblePanel] = useState<"auth" | "account" | null>(null);
+  const [visiblePanel, setVisiblePanel] = useState<"auth" | "account" | null>(
+    window.location.pathname === "/login" ? "auth" : null,
+  );
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const accessTokenRef = useRef<string | null>(null);
   const refreshStarted = useRef(false);

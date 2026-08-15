@@ -76,7 +76,7 @@ export function PasswordResetPage({ onReset }: Props) {
         {success ? (
           <>
             <p className="mt-4 text-emerald-700" role="status">{success}</p>
-            <a className="mt-6 inline-block font-medium text-blue-700 underline" href="/">Return to login</a>
+            <a className="mt-6 inline-block font-medium text-blue-700 underline" href="/login">Return to login</a>
           </>
         ) : (
           <form className="mt-5 space-y-4" onSubmit={submit}>

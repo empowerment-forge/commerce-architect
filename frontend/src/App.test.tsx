@@ -51,6 +51,20 @@ describe("App authentication flow", () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === "/api/auth/refresh/")).toHaveLength(1);
   });
 
+  it("opens the existing Login form only on the explicit login route", async () => {
+    window.history.replaceState({}, "", "/login");
+    mockApi({ "/api/auth/refresh/": () => response({}, false, 401) });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Username")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show login form" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Show register form" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+  });
+
   it("offers password recovery as a secondary login action with back navigation", async () => {
     mockApi({ "/api/auth/refresh/": () => response({}, false, 401) });
     const user = userEvent.setup();
@@ -62,6 +76,25 @@ describe("App authentication flow", () => {
     await user.click(screen.getByRole("button", { name: "Back to login" }));
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("keeps the two login recovery actions distinct and preserves both flows", async () => {
+    mockApi({ "/api/auth/refresh/": () => response({}, false, 401) });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Login | Register" }));
+
+    const forgot = screen.getByRole("button", { name: "Forgot password?" });
+    const resend = screen.getByRole("button", { name: "Need another verification email?" });
+    expect(forgot).not.toBe(resend);
+    expect(forgot.parentElement).toContainElement(resend);
+    expect(forgot.parentElement?.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
+
+    await user.click(resend);
+    expect(screen.getByLabelText("Email address")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }));
+    expect(screen.getByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
   });
 
   it("clears authentication feedback when the panel is closed and reopened", async () => {
