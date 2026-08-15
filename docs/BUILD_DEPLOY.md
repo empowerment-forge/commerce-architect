@@ -35,6 +35,9 @@ The browser client therefore uses same-origin API URLs without a build-time
 backend origin. A higher-priority regex location returns 404 for dotfile paths,
 including nested paths, so hidden-file probes never receive the SPA fallback or
 reach Django. CI checks representative root and nested dotfile requests.
+Bare proxy prefixes (`/api`, `/admin`, and `/static`) use relative canonical
+redirects to their slash-suffixed forms so public responses cannot expose the
+frontend container's internal scheme, hostname, or port.
 
 ### Backend
 

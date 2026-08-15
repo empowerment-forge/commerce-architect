@@ -7,6 +7,11 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    location = /api {
+        absolute_redirect off;
+        return 308 /api/;
+    }
+
     location /api/ {
         set $backend_upstream "${BACKEND_HOST}:${BACKEND_PORT}";
         proxy_pass http://$backend_upstream;
@@ -20,6 +25,11 @@ server {
         proxy_set_header Connection "";
     }
 
+    location = /admin {
+        absolute_redirect off;
+        return 308 /admin/;
+    }
+
     location /admin/ {
         set $backend_upstream "${BACKEND_HOST}:${BACKEND_PORT}";
         proxy_pass http://$backend_upstream;
@@ -31,6 +41,11 @@ server {
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
         proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
         proxy_set_header Connection "";
+    }
+
+    location = /static {
+        absolute_redirect off;
+        return 308 /static/;
     }
 
     location /static/ {
