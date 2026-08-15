@@ -26,7 +26,10 @@ Django migrations live within each app's `migrations/` directory. Migration
 files are reviewed schema changes; they do not seed application data or create
 privileged users.
 
-For deeper detail, see [Django architecture](../docs/DJANGO_ARCHITECTURE.md),
-[DRF API](../docs/DRF_API.md), [local PostgreSQL](../docs/POSTGRES_SETUP.md),
+The API uses serializers as its transport boundary and keeps views thin;
+business rules belong in models or domain services. PostgreSQL schema changes
+are expressed through reviewed migrations.
+
+For deeper detail, see the [current architecture](../docs/ARCHITECTURE.md),
 [container setup](../docs/DOCKER_SETUP.md), and
 [authentication architecture](../docs/USERAUTH_ARCHITECTURE.md).

@@ -1,8 +1,10 @@
 # Implementation Assignment: Registration and Email Verification
 
-> **Status: implemented on `feature/auth-registration-verification`.** This
-> approved assignment remains the acceptance contract for review and future
-> regression work.
+> **Historical implementation assignment:** the completed capability is merged
+> and recorded by milestone `milestone/auth-registration-verification`. Current
+> behavior belongs in [USERAUTH_ARCHITECTURE.md](../USERAUTH_ARCHITECTURE.md);
+> acceptance evidence belongs in
+> [UAT_REGISTRATION_VERIFICATION.md](../uat-testing/UAT_REGISTRATION_VERIFICATION.md).
 
 ## Objective
 

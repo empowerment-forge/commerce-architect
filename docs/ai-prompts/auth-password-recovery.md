@@ -1,7 +1,9 @@
 # Implementation Assignment: Password Recovery
 
-> **Status: implemented on `feature/auth-password-recovery`.** This document is
-> the acceptance contract for the password-recovery slice.
+> **Historical implementation assignment:** the completed capability is merged
+> and recorded by milestone `milestone/auth-password-recovery`. Current behavior
+> belongs in [USERAUTH_ARCHITECTURE.md](../USERAUTH_ARCHITECTURE.md); acceptance
+> evidence belongs in [UAT_PASSWORD_RECOVERY.md](../uat-testing/UAT_PASSWORD_RECOVERY.md).
 
 ## Objective
 

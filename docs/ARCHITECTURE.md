@@ -44,6 +44,23 @@ Authentication uses short-lived JWT access tokens in memory and rotating
 refresh tokens in secure HttpOnly cookies; see
 [USERAUTH_ARCHITECTURE.md](USERAUTH_ARCHITECTURE.md).
 
+## Application structure
+
+- Django 6.1 and Django REST Framework provide the backend API. Django apps own
+  domain boundaries: `accounts`, `catalog`, and `health`.
+- PostgreSQL 16 is the authoritative relational store. Django migrations own
+  schema evolution; they do not imply seed data or privileged-user creation.
+- React, TypeScript, Vite, and Tailwind CSS provide the browser application.
+  React owns presentation and client interaction; Django remains authoritative
+  for business rules, validation, authentication, and authorization.
+- API serializers control exposed representations and validate transport data.
+  Views stay thin; domain rules belong in models or domain services.
+
+The current catalog slice exposes `GET /api/products/`. Its product model uses
+decimal pricing, an active flag for soft deactivation, and a product type for
+future domain specialization. See [UX_ARCHITECTURE.md](UX_ARCHITECTURE.md) for
+the frontend direction and [ROADMAP.md](ROADMAP.md) for future commerce work.
+
 ## Deployment architecture
 
 GitHub Actions builds and validates each image once, publishes successful
