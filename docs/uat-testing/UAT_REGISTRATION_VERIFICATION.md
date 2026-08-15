@@ -531,9 +531,31 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 
 -
 
+### Scenario 21 — Duplicate normalized email registration
+
+**Steps**
+
+1. Register a user with a new email address.
+2. Attempt registration with a different username and the same email using
+   different letter casing or surrounding whitespace.
+
+**Expected**
+
+-   The second registration is rejected with a field-level email error.
+-   No second `User` or `EmailVerification` account is created.
+
+**Actual**
+
+- [ ] PASS
+- [ ] FAIL
+
+**Notes**
+
+-
+
 ## UAT Summary
 
--   Total scenarios: 20
+-   Total scenarios: 21
 -   Passed:
 -   Failed:
 -   Blocked:
