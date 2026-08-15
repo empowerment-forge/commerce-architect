@@ -1,8 +1,9 @@
-import { loginAccount, logoutAccount } from "./auth";
+import { loginAccount, logoutAccount, refreshAccessToken } from "./auth";
 import {
   apiGet,
   apiRequest,
   createAuthenticatedRequester,
+  SessionExpiredError,
   SESSION_EXPIRED_MESSAGE,
 } from "./client";
 
@@ -158,5 +159,37 @@ describe("API client", () => {
     await expect(Promise.all(requests)).resolves.toEqual([{ ok: true }, { ok: true }]);
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls.filter(([, init]) =>
+      (init?.headers as Record<string, string>)?.Authorization === "Bearer expired-access",
+    )).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([, init]) =>
+      (init?.headers as Record<string, string>)?.Authorization === "Bearer replacement-access",
+    )).toHaveLength(2);
+  });
+
+  it("shares one failed refresh and does not intercept or recursively retry it", async () => {
+    const onSessionExpired = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      response({ detail: "Token is invalid or expired" }, false, 401),
+    );
+    const request = createAuthenticatedRequester({
+      getAccessToken: () => "expired-access",
+      refreshAccessToken,
+      onAccessToken: vi.fn(),
+      onSessionExpired,
+    });
+
+    const results = await Promise.allSettled([
+      request("/api/auth/me/"),
+      request("/api/auth/resend-verification-authenticated/", { method: "POST" }),
+    ]);
+
+    expect(results).toEqual([
+      expect.objectContaining({ status: "rejected", reason: expect.any(SessionExpiredError) }),
+      expect.objectContaining({ status: "rejected", reason: expect.any(SessionExpiredError) }),
+    ]);
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/auth/refresh/")).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(onSessionExpired).toHaveBeenCalledTimes(2);
   });
 });
