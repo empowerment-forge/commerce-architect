@@ -92,6 +92,29 @@ jobs:
             fi
           done
 
+          for prefix in api admin static; do
+            headers="/tmp/frontend-${prefix}-redirect-headers"
+            status=$(curl --silent --show-error \
+              --output /dev/null \
+              --dump-header "${headers}" \
+              --write-out '%{http_code}' \
+              --header 'Host: dev-commerce.empowerment-forge.com' \
+              --header 'X-Forwarded-Proto: https' \
+              "http://127.0.0.1:8080/${prefix}")
+            test "${status}" = "308"
+            location=$(awk 'tolower($1) == "location:" {
+              sub(/\r$/, "", $2); print $2
+            }' "${headers}")
+            test "${location}" = "/${prefix}/"
+            if [[ "${location}" == http://* \
+              || "${location}" == *:8080* \
+              || "${location}" == *backend-smoke* ]]; then
+              echo "Unsafe bare-prefix redirect: /${prefix}"
+              cat "${headers}"
+              exit 1
+            fi
+          done
+
           curl --fail --silent --show-error \
             --header 'Host: dev-commerce.empowerment-forge.com' \
             --header 'X-Forwarded-Proto: https' \
@@ -102,6 +125,12 @@ jobs:
             --header 'Host: dev-commerce.empowerment-forge.com' \
             --header 'X-Forwarded-Proto: https' \
             http://127.0.0.1:8080/admin/ \
+            | grep --fixed-strings 'commerce-api-proxy-ok'
+
+          curl --fail --silent --show-error \
+            --header 'Host: dev-commerce.empowerment-forge.com' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8080/static/ \
             | grep --fixed-strings 'commerce-api-proxy-ok'
 
           curl --fail --silent --show-error \
