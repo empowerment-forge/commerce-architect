@@ -25,7 +25,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - A normal logged-out visit to `/` keeps the authentication panel hidden until
   `Login | Register` is selected.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -45,7 +45,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
   account exists, password recovery instructions will be sent.`
 - Only the active account with a current verified normalized email receives mail.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -66,7 +66,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - Local identity uses the direct peer; Railway trusts one platform proxy hop
   only when forwarded-proto trust is explicitly enabled.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -76,18 +76,23 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 
 **Steps**
 
-1. Request twice for one eligible account inside 60 seconds.
+1. Submit two password-recovery email requests for the same eligible account
+   within 60 seconds.
 2. After cooldown, request again and retain both links.
 3. In a controlled environment, simulate one mail-delivery failure and retry.
 
 **Expected**
 
-- Cooldown responses remain generic and only one message is sent during it.
-- The newest issued token supersedes the older token.
+- The first request returns the generic HTTP 202 response and sends one recovery
+  email.
+- The second request inside cooldown returns the same generic HTTP 202 response
+  and sends no second email.
+- After cooldown, a new request may issue a new email/token; the newest token
+  supersedes the older token.
 - Failed delivery clears its reserved token/cooldown, allowing immediate retry,
   while the public response remains unchanged.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -109,7 +114,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
   `/reset-password`; no token remains visible or in browser history.
 - Merely following the email GET does not consume the token.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -126,7 +131,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - Each is rejected with the same safe invalid-or-expired message.
 - No password or account state changes and no internal token detail appears.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -146,7 +151,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - Django validator feedback appears under the new-password field.
 - Neither error consumes the token; the corrected submission can succeed.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -169,7 +174,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - No automatic login occurs and local authentication state is empty.
 - Old password fails; new password succeeds.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -189,7 +194,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - Recovery never changes verification status or targets a prior address.
 - External password change invalidates the password-bound recovery digest.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -209,13 +214,17 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
   outstanding refresh tokens, and clears any recovery-browser refresh cookie.
 - The older refresh session is rejected and login is required.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
 -
 
 ## Scenario 11 — Concurrent rotation and generation enforcement
+
+The race is primarily accepted through automated backend integration/regression
+coverage; a human tester is not expected to synchronize two HTTP requests
+inside the race window manually.
 
 **Steps**
 
@@ -228,7 +237,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - Every generation-zero refresh is rejected after the account increments to one,
   including a token created around the blacklist sweep.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -247,7 +256,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
   lifetime; no database generation lookup was added to every API request.
 - It cannot obtain long-lived continuation because refresh generation changed.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
@@ -268,7 +277,7 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - Railway request → delivered email → safe link → reset → new-password login
   succeeds without provider-specific application code.
 
-**Result:** [ ] PASS [ ] FAIL [ ] BLOCKED
+**Result:** [ ] PASS [ ] FAIL [x] BLOCKED
 
 **Notes:**
 
@@ -277,11 +286,11 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 ## UAT Summary
 
 - Total scenarios: 13
-- Passed:
-- Failed:
-- Blocked:
+- Passed: 12 (Scenarios 1–12)
+- Failed: 0
+- Blocked: 1 (Scenario 13, pending Railway deployment and real Resend acceptance)
 - Tester:
 - Date:
 - Branch: `feature/auth-password-recovery`
 - Commit:
-- Notes:
+- Notes: Scenario 13 will be completed after merge and deployment.
