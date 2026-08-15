@@ -204,6 +204,8 @@ development and the optional native Vite workflow.
 
 -   [Developer onboarding](docs/DEVELOPER_ONBOARDING.md) — first-time setup and
     daily workflow
+-   [Validation and PR reporting standards](docs/VALIDATION_STANDARDS.md) —
+    canonical validation-summary structure and reporting rules
 -   [Docker and Podman setup](docs/DOCKER_SETUP.md) — local services,
     configuration, and checks
 -   [Current hosted architecture](docs/ARCHITECTURE.md) — canonical runtime
