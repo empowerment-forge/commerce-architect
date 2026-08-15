@@ -343,7 +343,7 @@ function AccountPanel({ request, user, onUserChange, onLogout, onClose }: Accoun
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold">Account</h2>
           <p className="mt-2"><span className="font-medium">Username:</span> {user.username}</p>
@@ -360,7 +360,7 @@ function AccountPanel({ request, user, onUserChange, onLogout, onClose }: Accoun
           {resendMessage && <p className="mt-2 text-sm text-emerald-700" role="status">{resendMessage}</p>}
           {resendError && <p className="mt-2 text-sm text-red-700" role="alert">{resendError}</p>}
         </div>
-        <div className="flex gap-3">
+        <div aria-label="Account actions" className="flex flex-wrap gap-3" role="group">
           <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium" onClick={() => { clearFeedback(); setSettingsOpen(true); }} type="button">Update account</button>
           <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium" onClick={onLogout} type="button">Logout</button>
           <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium" onClick={() => { clearFeedback(); onClose(); }} type="button">Close</button>

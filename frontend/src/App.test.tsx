@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import App from "./App";
@@ -336,6 +336,11 @@ describe("App authentication flow", () => {
     expect(screen.getByText("Account status:")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Update account" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("New email")).not.toBeInTheDocument();
+    const accountActions = screen.getByRole("group", { name: "Account actions" });
+    expect(accountActions).toHaveClass("flex", "flex-wrap", "gap-3");
+    expect(within(accountActions).getByRole("button", { name: "Update account" })).toBeInTheDocument();
+    expect(within(accountActions).getByRole("button", { name: "Logout" })).toBeInTheDocument();
+    expect(within(accountActions).getByRole("button", { name: "Close" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Update account" }));
     expect(screen.getByRole("heading", { name: "Update account" })).toBeInTheDocument();
@@ -355,6 +360,22 @@ describe("App authentication flow", () => {
     expect(fetchMock.mock.calls.find(([url]) => url === "/api/auth/change-email/" )?.[1]).toMatchObject({
       headers: expect.objectContaining({ Authorization: "Bearer access-token" }),
     });
+  });
+
+  it("closes the responsive Account action group without changing the session", async () => {
+    mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response(verifiedUser),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    const accountActions = screen.getByRole("group", { name: "Account actions" });
+    await user.click(within(accountActions).getByRole("button", { name: "Close" }));
+
+    expect(screen.queryByRole("heading", { name: "Account" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "alice" })).toBeInTheDocument();
   });
 
   it("restores /me from one refresh-cookie request", async () => {
