@@ -4,7 +4,8 @@
 > This record is retained for Phase 1 decision history. It is not the current
 > operational specification. See [ARCHITECTURE.md](ARCHITECTURE.md) for the
 > implemented topology and [BUILD_DEPLOY.md](BUILD_DEPLOY.md) for current CI and
-> deployment behavior.
+> deployment behavior. Its historical hosting-provider selection is not a
+> platform requirement or current provider recommendation.
 
 **Status:** Locked  
 **Phase:** Phase 1 (Validation / Owner-Operated)  

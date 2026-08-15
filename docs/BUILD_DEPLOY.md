@@ -1,205 +1,198 @@
 # Build and Deployment Contract
 
-This document is the canonical description of how Commerce Architect artifacts
-are built, validated, published, and normally deployed. First-time setup belongs
-in [ENVIRONMENT_PROVISIONING.md](ENVIRONMENT_PROVISIONING.md); operator and
-recovery procedures belong in [OPERATIONS.md](OPERATIONS.md).
+This is the canonical provider-neutral contract for building, configuring,
+deploying, and operating Commerce Architect. It defines what a deployment must
+provide; each adopter owns the provider-specific implementation and runbook.
 
-## Current hosted environment
+Commerce Architect can run on any platform that supports OCI containers,
+persistent PostgreSQL, private service networking, HTTPS ingress, runtime
+secrets, migrations, and health checks.
 
-`dev-commerce.empowerment-forge.com` is an internet-facing, production-style
-**non-production** Railway environment. It uses HTTPS, non-production
-credentials, and no real customer data. Railway calls the environment
-`development`, while Django deliberately runs its hardened production settings:
+## Runtime topology
 
 ```text
-COMMERCE_ENV=production
-DJANGO_DEBUG=false
+Browser
+  │ HTTPS
+  ▼
+Frontend: NGINX + built React assets
+  ├── /             SPA and fallback
+  ├── /api/         proxy to Django
+  ├── /admin/       proxy to Django
+  └── /static/      proxy to Django/WhiteNoise
+                          │
+                          ▼
+                   Backend: Gunicorn + Django/DRF
+                          │
+                          ▼
+                   Private persistent PostgreSQL
 ```
 
-These names describe different concerns: business/data purpose versus runtime
-security mode. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full topology.
+The browser-facing frontend and API are expected to share an HTTPS origin. A
+different-origin deployment requires a deliberate CORS, CSRF, cookie, and
+trusted-proxy review.
 
-## Artifacts and runtime
+## Production artifacts
 
 ### Frontend
 
-`frontend/Dockerfile` is a multi-stage production build. Its Node 24 stage runs
-locked dependency installation, Vitest, ESLint, and the TypeScript/Vite build.
-Only `dist` and the reviewed NGINX configuration enter the runtime image.
-Railway never runs the Vite development server.
+`frontend/Dockerfile` uses Node 24 to install locked dependencies, run Vitest
+and ESLint, and build the TypeScript/Vite application. The runtime image contains
+only the built assets and reviewed NGINX configuration; it does not run Vite.
 
-NGINX listens on Railway's `PORT`, serves the SPA, and proxies `/api/`,
-`/admin/`, and `/static/` to the backend through Railway private networking.
-The browser client therefore uses same-origin API URLs without a build-time
-backend origin. A higher-priority regex location returns 404 for dotfile paths,
-including nested paths, so hidden-file probes never receive the SPA fallback or
-reach Django. CI checks representative root and nested dotfile requests.
-Bare proxy prefixes (`/api`, `/admin`, and `/static`) use relative canonical
-redirects to their slash-suffixed forms so public responses cannot expose the
-frontend container's internal scheme, hostname, or port.
+NGINX serves the SPA and proxies `/api/`, `/admin/`, and `/static/` to the
+backend. Dotfile requests are rejected before SPA fallback. Bare proxy prefixes
+use relative redirects so internal hostnames, schemes, and ports do not appear
+in public `Location` headers.
+
+The hosting platform must supply the listener port and a privately reachable
+backend host and port through runtime configuration.
 
 ### Backend
 
 `backend/Dockerfile` installs Python dependencies, runs `collectstatic`, switches
-to a non-root user, and launches Gunicorn. `backend/gunicorn.conf.py` binds to
-Railway's `PORT`. WhiteNoise serves compressed, manifest-versioned Django static
-assets through the backend; NGINX only proxies those requests.
+to a non-root user, and launches Gunicorn. WhiteNoise serves compressed,
+manifest-versioned Django static assets.
 
-`python manage.py migrate --noinput` runs as Railway's backend pre-deploy command
-from the same digest-qualified image. Migration failure prevents activation.
-`GET /health/` then gates activation and returns 503 if PostgreSQL is unavailable.
+Every release must run `python manage.py migrate --noinput` before activating
+the new backend. Migration failure must prevent activation. `GET /health/`
+returns 503 when PostgreSQL is unavailable and should gate backend readiness.
 
 ### Database
 
-Railway PostgreSQL is persistent application state on a volume mounted at
-`/var/lib/postgresql/data`. It is private and has no public TCP domain. Django
-uses Railway variable references; rendered credentials are never copied into
-source, documentation, or GitHub Actions.
+PostgreSQL 16 is required. Hosted data must use persistent storage and private
+network access; database credentials must be supplied at runtime. Local Compose
+state is separate and documented in [DOCKER_SETUP.md](DOCKER_SETUP.md).
 
-Local Compose PostgreSQL is disposable developer state. Its volume, migration,
-inspection, and reset procedures are documented in
-[DOCKER_SETUP.md](DOCKER_SETUP.md).
+## Environment contract
 
-## CI trigger matrix
+A production-mode backend uses `COMMERCE_ENV=production`, disables debug, and
+requires environment-specific values for:
 
-| Event | Validate both images | Publish to GHCR | Deploy hosted development |
-|---|---:|---:|---:|
-| Pull request targeting `develop` | Yes | No | No |
-| Push to `main` | Yes | No | No |
-| Push to `develop` | Yes | Yes | Yes |
-| Feature-branch push | No | No | No |
-| Manual workflow dispatch | Yes | No | No |
+- Django secret, allowed hosts, and trusted HTTPS origins;
+- PostgreSQL host, port, name, user, and password;
+- frontend public base URL and authentication policy;
+- secure-proxy behavior appropriate to the actual ingress topology;
+- a delivery-capable email backend and non-local sender.
 
-The workflow currently validates and deploys both components even when only one
-changed. Path-based independent deployment is a future optimization.
+When SMTP is selected, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`,
+`SMTP_PASSWORD`, TLS/SSL mode, timeout, and `DEFAULT_FROM_EMAIL`. The application
+uses Django's provider-neutral mail interface and has no provider SDK dependency.
+Provider credentials must never use a frontend-exposed `VITE_` variable.
 
-## Build once, deploy by digest
+Secret values belong in the hosting platform's secret store or another approved
+secret manager. Do not bake them into images, commit them, print them in logs, or
+copy rendered values into documentation.
 
-For each component, GitHub Actions:
+## Provisioning requirements
 
-1. Builds the production image once.
-2. Runs checks against that exact image.
-3. Scans it with Trivy for fixed HIGH/CRITICAL findings.
-4. Saves it as a one-day workflow artifact.
-5. On a successful `develop` push, reloads and publishes it to GHCR under the
-   commit SHA.
-6. Resolves the registry digest.
-7. Updates the Railway service source to `image@sha256:digest`.
-8. Waits for Railway's terminal deployment status and fails unless successful.
+A new environment must provide:
 
-The frontend image runs its tests, lint, and production build. The backend image
-runs pytest against disposable PostgreSQL, ordinary Django checks, production
-deployment checks, migration checks, and an image smoke test. Secrets are not
-baked into either artifact.
+1. One persistent PostgreSQL database with no unnecessary public exposure.
+2. One backend service and one frontend service built from the reviewed OCI
+   images.
+3. Private frontend-to-backend and backend-to-database connectivity.
+4. An HTTPS public domain for the frontend, with certificate and DNS ownership
+   recorded by the operator.
+5. Environment-unique secrets and explicit production security settings.
+6. Backend migration and database-aware health gates.
+7. Frontend health checking and backend proxy configuration.
+8. A controlled image registry and deployment identity, preferably immutable
+   image digests.
+9. An approved bootstrap-data policy. Migrations do not seed products or create
+   privileged users.
 
-Dependabot targets `develop` weekly for npm, pip, and GitHub Actions. Routine
-minor and patch updates are grouped per ecosystem; major-version updates remain
-explicit review work. Dependency manifests intentionally express compatible
-ranges, so CI's exact-image validation remains the release gate while a Python
-lock/constraints decision remains open.
+Create the first superuser interactively in the backend service after a healthy
+deployment. Never store its password in variables, fixtures, CI, shell history,
+or documentation.
 
-## Deployment credentials and boundaries
+Provisioning is reproducible only when another authorized operator can build the
+images, supply approved configuration, deploy the three runtime tiers, and pass
+the acceptance checks without undocumented provider knowledge.
 
-- `GITHUB_TOKEN` publishes packages with the workflow's scoped `packages: write`
-  permission.
-- A Railway Project Token is stored as GitHub Actions secret `RAILWAY_TOKEN` and
-  is available only to deployment jobs on trusted `develop` pushes.
-- Railway's backend and frontend Registry Credentials use a separate read-only
-  GHCR credential. Image auto-update is disabled so GitHub Actions remains the
-  deployment control plane.
-- `DJANGO_SECRET_KEY` and database credentials exist only in Railway variables.
-- Feature branches and pull requests never receive deployment credentials.
+## CI and artifact validation
 
-Credential ownership and rotation steps are in [OPERATIONS.md](OPERATIONS.md).
+GitHub Actions validates the production frontend and backend images directly:
 
-## Current environment contract
+1. Build each production image once.
+2. Run frontend tests, lint, build, and NGINX/runtime routing checks.
+3. Run backend pytest, Django system/deployment checks, migrations, and runtime
+   health checks against disposable PostgreSQL.
+4. Scan both images with Trivy for fixed HIGH/CRITICAL findings.
+5. Preserve deployment identity through immutable image digests.
 
-The frontend custom domain is `dev-commerce.empowerment-forge.com`. The backend
-allows that public host, its current Railway-generated host, and Railway's health
-check hostname. Trusted origins include the public HTTPS origin.
+Pull requests targeting `develop`, pushes to `main`, and manual dispatches run
+validation. The maintained deployment automation may publish and deploy
+validated `develop` artifacts for the project maintainers, but that private
+hosting workflow is not part of the adopter-facing platform contract.
 
-Railway terminates public TLS and forwards the original scheme. Django trusts
-the reviewed proxy header. Secure cookies remain enabled. The deployed
-`DJANGO_SECURE_SSL_REDIRECT` override must match the proven Railway proxy path;
-operators must verify it without printing unrelated variables before changing
-redirect behavior.
+Feature branches and pull requests must not receive deployment credentials.
+Registry and deployment credentials must be narrowly scoped, separated by
+purpose, rotated by their owners, and available only to trusted deployment jobs.
 
-Email verification requires `AUTH_REQUIRE_VERIFIED_EMAIL`, positive token TTL
-and non-negative resend-cooldown values, an absolute HTTPS
-`AUTH_FRONTEND_BASE_URL`, a delivery-capable `EMAIL_BACKEND`, and a non-local
-`DEFAULT_FROM_EMAIL`. Production startup rejects missing or local-only email
-settings. Provider credentials remain runtime secrets and must never use a
-`VITE_` prefix.
+## Deployment sequence
 
-Password recovery additionally accepts positive
-`AUTH_PASSWORD_RECOVERY_TTL_SECONDS` (default `1800`) and non-negative
-`AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS` (default `60`). It reuses the
-same mailer, sender, and frontend base URL.
+For any provider:
 
-For Railway SMTP delivery, configure service variables—not repository files—with:
+1. Build and validate the frontend and backend production images.
+2. Publish the approved images to a controlled OCI registry.
+3. Resolve and record immutable image digests.
+4. Deploy the backend digest, running migrations before activation.
+5. Require the backend database health check to pass.
+6. Deploy the frontend digest with private backend routing configured.
+7. Require the frontend health check to pass.
+8. Verify DNS, HTTPS, service identity, and the acceptance endpoints.
 
-```text
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-SMTP_HOST=smtp.resend.com
-SMTP_PORT=587
-SMTP_USERNAME=resend
-SMTP_PASSWORD=<Railway secret variable>
-SMTP_USE_TLS=true
-SMTP_USE_SSL=false
-SMTP_TIMEOUT=10
-DEFAULT_FROM_EMAIL=Commerce Architect <accounts@empowerment-forge.com>
-AUTH_FRONTEND_BASE_URL=https://dev-commerce.empowerment-forge.com
-```
+Never assume rolling back an application image reverses a database migration.
+Before rollback, confirm schema compatibility and identify the last known-good
+digests. Prefer a forward fix when compatibility is unknown.
 
-Resend is the tested example; any standards-compatible SMTP provider can use
-the same variables. Never commit or print the provider credential. Django 6.1
-receives these values through `MAILERS["default"]["OPTIONS"]`; deprecated
-`EMAIL_HOST`/`EMAIL_PORT` settings are not used.
+## Deployment acceptance
 
-The backend's Railway-generated public domain currently remains available as a
-temporary operational endpoint. Whether to remove it or retain it in restricted
-form is unresolved; do not remove it without evaluating health and emergency
-access needs.
+From an authorized client, verify:
 
-## Normal deployment verification
+| Request | Expected result |
+| --- | --- |
+| `GET /` | 200 frontend |
+| `GET /a-client-route` | 200 SPA fallback |
+| `GET /api/products/` | 200 |
+| `GET /api/auth/me/` without credentials | 401 |
+| `GET /api/` | 404; no API index exists |
+| `GET /admin/` | redirect to login |
+| representative `/static/admin/...` asset | 200 |
+| backend `GET /health/` | 200 with database status `ok` |
 
-After a `develop` push:
+Also verify that bare `/api`, `/admin`, and `/static` redirects remain relative,
+that PostgreSQL has persistent private storage, and that running services match
+the intended image digests. Expected 401, 404, and redirect responses are not
+deployment failures.
 
-1. Confirm both workflow publish/deploy jobs succeeded.
-2. Confirm both Railway services report `SUCCESS` for the expected commit.
-3. Confirm each Railway image source contains the GHCR digest resolved for that
-   commit.
-4. Run the non-destructive acceptance checks in
-   [OPERATIONS.md](OPERATIONS.md#post-deployment-acceptance).
+Authentication or email changes require feature-specific acceptance beyond
+these route checks. Distinguish CI validation, deployment success, and human UAT
+according to [VALIDATION_STANDARDS.md](VALIDATION_STANDARDS.md).
 
-Expected unauthenticated behavior includes `/api/auth/me/` returning 401,
-`/api/` returning 404 because no API index exists, and `/admin/` redirecting to
-login.
+## Operational requirements
+
+Operators must maintain provider-specific private procedures for:
+
+- deployment status, logs, and sanitized diagnosis;
+- credential inventory, ownership, least scope, and rotation;
+- migration failure and rollback decisions;
+- interactive superuser administration;
+- monitoring, alerts, incident ownership, and service objectives;
+- backup retention, RPO/RTO, and isolated restoration tests;
+- DNS, certificate, trusted-proxy, CSP, and HSTS changes;
+- capacity, region, replicas, access review, and data policy.
+
+Do not treat hosted data as recoverable until an isolated restore has been
+successfully exercised. Do not claim a deployment is accepted until its health,
+identity, routing, and relevant user journeys have been verified.
 
 ## Release and data boundaries
 
-Migrations create and evolve schema; they never imply catalog/demo seeding or
-privileged-user creation. No canonical seed-data procedure has been approved.
-Hosted superusers are created interactively according to the provisioning
-runbook, and passwords must never enter variables, fixtures, shell history, CI,
-or documentation.
+No production promotion mechanism is defined by this document. Development,
+UAT, and production should use the same structural process with separate
+configuration, credentials, data, domains, and approval policy.
 
-No production release/promotion mechanism is defined here. `main` validates but
-does not publish or deploy. Implementation, UAT, and production must use the same
-structural process with separate parameter values, credentials, data, and
-approval policy once those environments are approved.
-
-## Unresolved decisions
-
-- Tested backup/PITR capability, retention, RPO/RTO, and restore ownership.
-- Application rollback authorization and migration compatibility policy.
-- Monitoring, alerts, incident ownership, and service-level objectives.
-- Production/UAT promotion and environment-specific workflow parameterization.
-- Cloudflare proxy mode, certificate ownership, CSP, and HSTS rollout.
-- Backend public-domain removal or restricted retention.
-- Capacity, region, replica count, and periodic access-review policy.
-- Catalog/demo bootstrap-data policy.
-
-Until rollback and isolated database restore are tested, hosted development is
-successfully deployed but is not fully operationally recoverable.
+Commerce Architect is currently an early-stage platform. Backup/restore,
+rollback, monitoring, and incident-response maturity remain required before
+revenue-critical workloads or real customer commerce data depend on it.

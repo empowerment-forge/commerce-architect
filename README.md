@@ -21,7 +21,7 @@ the repository root.
 ## Current Status
 
 -   Django + DRF backend operational
--   PostgreSQL 16 locally and persistent Railway PostgreSQL in hosted development
+-   PostgreSQL 16 locally and persistent PostgreSQL in hosted environments
 -   React/Vite frontend with product and end-to-end authentication UI
 -   Podman-compatible local development through the shared Compose file
 -   Production-image validation and immutable deployment in GitHub Actions
@@ -107,8 +107,7 @@ The workflow:
 3.  Start disposable PostgreSQL and run pytest and Django checks against the
     production backend image
 4.  Scan both validated images for fixed HIGH/CRITICAL findings
-5.  On successful pushes to `develop`, publish both images by commit SHA,
-    resolve their digests, and deploy those immutable digests to Railway
+5.  Preserve immutable image identity for approved deployment automation
 
 This checks both frontend and backend behavior while retaining an
 OCI-container-based, portable local architecture.
@@ -166,7 +165,7 @@ Local containers: - Docker Compose - Podman Compose-compatible
 
 Testing: - pytest - pytest-django - Vitest - React Testing Library
 
-CI: - GitHub Actions - exact-image tests/scans - digest-based Railway deployment
+CI: - GitHub Actions - exact-image tests/scans - digest-based deployment
 
 Future: - Stripe integration - Orders domain - Scheduling domain
 
@@ -212,7 +211,7 @@ development and the optional native Vite workflow.
     layers, production-image checks, and human-validation boundaries
 -   [Docker and Podman setup](docs/DOCKER_SETUP.md) — local services,
     configuration, and checks
--   [Current hosted architecture](docs/ARCHITECTURE.md) — canonical runtime
+-   [Current architecture](docs/ARCHITECTURE.md) — canonical runtime
     topology and system boundaries
 -   [Architecture record](docs/ARCHITECTURE_v1.2.md) — frozen Phase 1 design
     context, superseded where current implementation differs
@@ -223,12 +222,8 @@ development and the optional native Vite workflow.
     account, token, verification, and recovery design
 -   [Frontend and UX direction](docs/UX_ARCHITECTURE.md) — frontend technology,
     responsibility, and experience guardrails
--   [Build and deployment guide](docs/BUILD_DEPLOY.md) — current build and
-    normal deployment contract
--   [Environment provisioning](docs/ENVIRONMENT_PROVISIONING.md) — repeatable
-    Railway environment bootstrap
--   [Operations runbook](docs/OPERATIONS.md) — status, verification, recovery,
-    and credential procedures
+-   [Build and deployment guide](docs/BUILD_DEPLOY.md) — provider-neutral build,
+    provisioning, deployment, validation, and operations contract
 -   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and
     [security policy](SECURITY.md) — repository policies
 

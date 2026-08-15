@@ -19,9 +19,9 @@ acknowledge the report when practical, investigate it, and coordinate disclosure
 and remediation based on severity and project capacity.
 
 If a credential may have been exposed, revoke or rotate it through the owning
-service before sharing sanitized evidence. The credential inventory and
-rotation boundaries are documented in
-[`docs/OPERATIONS.md`](docs/OPERATIONS.md#credential-inventory-and-rotation).
+service before sharing sanitized evidence. Provider-neutral secret and
+operational boundaries are documented in
+[`docs/BUILD_DEPLOY.md`](docs/BUILD_DEPLOY.md#operational-requirements).
 
 ## Supported Versions
 

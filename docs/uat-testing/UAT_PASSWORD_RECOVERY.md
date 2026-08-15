@@ -5,7 +5,7 @@
 Validate password recovery end to end without exposing account membership or
 leaving old long-lived sessions usable. Use disposable accounts and inboxes.
 For real delivery, configure provider-neutral SMTP outside the repository; the
-tested example is Resend SMTP.
+provider choice belongs to the deployment operator.
 
 Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 
@@ -63,8 +63,8 @@ Record each scenario as `PASS`, `FAIL`, or `BLOCKED`, with evidence in Notes.
 - Malformed syntax has a field-level email error.
 - The scoped policy permits at most five requests/minute/client identity and
   then returns HTTP 429 without disclosing account state.
-- Local identity uses the direct peer; Railway trusts one platform proxy hop
-  only when forwarded-proto trust is explicitly enabled.
+- Local identity uses the direct peer; a hosted deployment trusts forwarded
+  proxy data only when its proxy topology has been explicitly reviewed.
 
 **Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
@@ -268,21 +268,22 @@ inside the race window manually.
 
 1. Produce request, mismatch, validator, invalid-link, and success feedback;
    navigate away/back and retry each relevant form.
-2. Repeat the complete known-account flow on Railway with real Resend delivery.
+2. Repeat the complete known-account flow in the hosted development environment
+   with real SMTP delivery.
 
 **Expected**
 
 - Success/error feedback clears between submissions and transitions.
 - Passwords/tokens are never stored in localStorage/sessionStorage or displayed.
-- Railway request → delivered email → safe link → reset → new-password login
+- Hosted request → delivered email → safe link → reset → new-password login
   succeeds without provider-specific application code.
 
 **Result:** [x] PASS [ ] FAIL [ ] BLOCKED
 
 **Notes:**
 
-- Deployed Railway acceptance completed successfully, including real recovery
-  email delivery through Resend and password reset/login on desktop and iPhone.
+- Deployed acceptance completed successfully, including real recovery email
+  delivery and password reset/login on desktop and iPhone.
 
 ## UAT Summary
 
@@ -294,5 +295,5 @@ inside the race window manually.
 - Date: 2026-08-15
 - Branch: `develop`
 - Commit:
-- Notes: Overall UAT 13/13 PASS. Deployed Railway acceptance and real Resend
-  delivery completed successfully.
+- Notes: Overall UAT 13/13 PASS. Deployed acceptance and real SMTP delivery
+  completed successfully.

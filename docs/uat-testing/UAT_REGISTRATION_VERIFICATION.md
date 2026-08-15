@@ -503,8 +503,7 @@ Use fresh, disposable local-only identities. Do not use personal credentials.
 **Preconditions**
 
 -   Configure the SMTP backend and `SMTP_*` variables outside the repository.
--   Use a real test inbox and the expected verified sender:
-    `Commerce Architect <accounts@empowerment-forge.com>`.
+-   Use a real test inbox and the deployment's approved verified sender.
 
 **Steps**
 
