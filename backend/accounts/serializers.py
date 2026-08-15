@@ -3,9 +3,16 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.serializers import (
+    TokenObtainPairSerializer,
+    TokenRefreshSerializer,
+)
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import EmailVerification
-from .services import issue_verification, normalize_email
+from .models import AccountSecurityState, EmailVerification
+from .services import get_valid_password_recovery, issue_verification, normalize_email
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -71,3 +78,63 @@ class ChangeEmailSerializer(serializers.Serializer):
         if normalize_email(user.email) == normalized:
             raise serializers.ValidationError("Enter a different email address.")
         return normalized
+
+
+class PasswordRecoveryRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True, allow_blank=False)
+
+    def validate_email(self, value):
+        return normalize_email(value)
+
+
+class PasswordRecoveryConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField(trim_whitespace=False, allow_blank=False)
+    token = serializers.CharField(trim_whitespace=False, allow_blank=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError(
+                {"confirm_password": ["Passwords do not match."]}
+            )
+        recovery = get_valid_password_recovery(attrs["uid"], attrs["token"])
+        if recovery is None:
+            raise serializers.ValidationError(
+                {
+                    "code": "invalid_or_expired_token",
+                    "detail": "This password reset link is invalid or expired.",
+                }
+            )
+        try:
+            validate_password(attrs["new_password"], user=recovery.user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                {"new_password": list(exc.messages)}
+            ) from exc
+        attrs["recovery"] = recovery
+        return attrs
+
+
+class SessionTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        security, _ = AccountSecurityState.objects.get_or_create(user=user)
+        token["session_generation"] = security.session_generation
+        return token
+
+
+class SessionTokenRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        refresh = RefreshToken(attrs["refresh"])
+        user_id = refresh.get(api_settings.USER_ID_CLAIM)
+        generation = (
+            AccountSecurityState.objects.filter(user_id=user_id)
+            .values_list("session_generation", flat=True)
+            .first()
+            or 0
+        )
+        if refresh.get("session_generation", 0) != generation:
+            raise InvalidToken("Refresh session has been revoked.")
+        return super().validate(attrs)

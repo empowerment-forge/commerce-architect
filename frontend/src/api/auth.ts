@@ -84,3 +84,31 @@ export function logoutAccount() {
     credentials: "include",
   });
 }
+
+export function requestPasswordReset(email: string) {
+  return apiRequest<{ detail: string }>("/api/auth/password-reset/request/", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function confirmPasswordReset(
+  uid: string,
+  token: string,
+  newPassword: string,
+  confirmPassword: string,
+) {
+  return apiRequest<{ code: "password_reset"; detail: string }>(
+    "/api/auth/password-reset/confirm/",
+    {
+      method: "POST",
+      body: {
+        uid,
+        token,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      },
+      credentials: "include",
+    },
+  );
+}

@@ -128,6 +128,11 @@ and non-negative resend-cooldown values, an absolute HTTPS
 settings. Provider credentials remain runtime secrets and must never use a
 `VITE_` prefix.
 
+Password recovery additionally accepts positive
+`AUTH_PASSWORD_RECOVERY_TTL_SECONDS` (default `1800`) and non-negative
+`AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS` (default `60`). It reuses the
+same mailer, sender, and frontend base URL.
+
 For Railway SMTP delivery, configure service variables—not repository files—with:
 
 ```text

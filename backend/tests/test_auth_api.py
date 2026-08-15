@@ -9,13 +9,15 @@ from datetime import timedelta
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
-from accounts.models import EmailVerification
+from accounts.models import AccountSecurityState, EmailVerification, PasswordRecoveryState
 from accounts.services import (
     issue_verification,
     send_verification_email,
     token_digest,
     verification_url,
 )
+from django.core.cache import cache
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from catalog.models import Product
 
 
@@ -30,6 +32,28 @@ def registration_payload(**overrides):
 
 
 def verification_params(message=None):
+    message = message or mail.outbox[-1]
+    link = next(line for line in message.body.splitlines() if line.startswith("http"))
+    parsed = urlparse(link)
+    query = parse_qs(parsed.query)
+    return parsed, {"uid": query["uid"][0], "token": query["token"][0]}
+
+
+def verified_recovery_user(username="recoveryuser", email="recovery@example.com"):
+    user = User.objects.create_user(
+        username=username,
+        email=email,
+        password="SecurePass123!",
+    )
+    EmailVerification.objects.create(
+        user=user,
+        normalized_email=email,
+        verified_at=timezone.now(),
+    )
+    return user
+
+
+def recovery_params(message=None):
     message = message or mail.outbox[-1]
     link = next(line for line in message.body.splitlines() if line.startswith("http"))
     parsed = urlparse(link)
@@ -852,3 +876,335 @@ def test_logout_blacklists_refresh_token_and_clears_cookie(client):
     refresh_response = stale_client.post("/api/auth/refresh/")
 
     assert refresh_response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_password_recovery_request_eligible_sends_digest_only_email(client):
+    user = verified_recovery_user()
+
+    response = client.post(
+        "/api/auth/password-reset/request/",
+        {"email": " Recovery@Example.COM "},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "detail": "If an eligible account exists, password recovery instructions will be sent."
+    }
+    recovery = PasswordRecoveryState.objects.get(user=user)
+    assert len(recovery.token_digest) == 64
+    assert recovery.token_created_at
+    assert recovery.last_sent_at
+    assert len(mail.outbox) == 1
+    parsed, params = recovery_params()
+    assert parsed.path == "/reset-password"
+    assert params["token"] not in recovery.token_digest
+    assert mail.outbox[0].to == ["recovery@example.com"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("account_state", ["unknown", "inactive", "unverified"])
+def test_password_recovery_request_is_enumeration_resistant(client, account_state):
+    if account_state == "inactive":
+        user = verified_recovery_user()
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+    elif account_state == "unverified":
+        user = User.objects.create_user(
+            username="unverifiedrecovery",
+            email="recovery@example.com",
+            password="SecurePass123!",
+        )
+        EmailVerification.objects.create(
+            user=user,
+            normalized_email=user.email,
+        )
+
+    response = client.post(
+        "/api/auth/password-reset/request/",
+        {"email": "recovery@example.com"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 202
+    assert response.json()["detail"].startswith("If an eligible account exists")
+    assert len(mail.outbox) == 0
+
+
+@pytest.mark.django_db
+def test_password_recovery_request_validates_email_and_throttles(client):
+    cache.clear()
+    malformed = client.post(
+        "/api/auth/password-reset/request/",
+        {"email": "not-an-email"},
+        content_type="application/json",
+    )
+    assert malformed.status_code == 400
+    assert "email" in malformed.json()
+
+    responses = [
+        client.post(
+            "/api/auth/password-reset/request/",
+            {"email": f"unknown{index}@example.com"},
+            content_type="application/json",
+        )
+        for index in range(5)
+    ]
+    assert [item.status_code for item in responses[:4]] == [202] * 4
+    assert responses[4].status_code == 429
+
+
+@pytest.mark.django_db
+def test_password_recovery_cooldown_and_reissue_supersedes_old_token(client, settings):
+    verified_recovery_user()
+    settings.AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS = 60
+    first = client.post(
+        "/api/auth/password-reset/request/",
+        {"email": "recovery@example.com"},
+        content_type="application/json",
+    )
+    _, first_params = recovery_params()
+    second = client.post(
+        "/api/auth/password-reset/request/",
+        {"email": "recovery@example.com"},
+        content_type="application/json",
+    )
+    assert first.status_code == second.status_code == 202
+    assert len(mail.outbox) == 1
+
+    recovery = PasswordRecoveryState.objects.get()
+    recovery.last_sent_at = timezone.now() - timedelta(seconds=61)
+    recovery.save(update_fields=["last_sent_at"])
+    client.post(
+        "/api/auth/password-reset/request/",
+        {"email": "recovery@example.com"},
+        content_type="application/json",
+    )
+    _, replacement_params = recovery_params()
+    assert len(mail.outbox) == 2
+
+    old = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**first_params, "new_password": "OtherSecure456!", "confirm_password": "OtherSecure456!"},
+        content_type="application/json",
+    )
+    replacement = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**replacement_params, "new_password": "OtherSecure456!", "confirm_password": "OtherSecure456!"},
+        content_type="application/json",
+    )
+    assert old.status_code == 400
+    assert replacement.status_code == 200
+
+
+@pytest.mark.django_db
+def test_password_recovery_delivery_failure_releases_cooldown_without_leak(
+    client, caplog
+):
+    verified_recovery_user()
+    provider_secret = "provider-secret-must-not-leak"
+    with patch(
+        "accounts.views.send_password_recovery_email",
+        side_effect=RuntimeError(provider_secret),
+    ):
+        response = client.post(
+            "/api/auth/password-reset/request/",
+            {"email": "recovery@example.com"},
+            content_type="application/json",
+        )
+    recovery = PasswordRecoveryState.objects.get()
+    assert response.status_code == 202
+    assert recovery.token_digest == ""
+    assert recovery.token_created_at is None
+    assert recovery.last_sent_at is None
+    assert provider_secret not in caplog.text
+    assert "Password recovery email delivery failed." in caplog.text
+
+    retry = client.post(
+        "/api/auth/password-reset/request/",
+        {"email": "recovery@example.com"},
+        content_type="application/json",
+    )
+    assert retry.status_code == 202
+    assert len(mail.outbox) == 1
+
+
+@pytest.mark.django_db
+def test_password_recovery_rejects_expired_tampered_and_reused_tokens(client, settings):
+    verified_recovery_user()
+    client.post(
+        "/api/auth/password-reset/request/",
+        {"email": "recovery@example.com"},
+        content_type="application/json",
+    )
+    _, params = recovery_params()
+    tampered = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**params, "token": params["token"] + "x", "new_password": "OtherSecure456!", "confirm_password": "OtherSecure456!"},
+        content_type="application/json",
+    )
+    assert tampered.status_code == 400
+
+    settings.AUTH_PASSWORD_RECOVERY_TTL_SECONDS = 1
+    recovery = PasswordRecoveryState.objects.get()
+    recovery.token_created_at = timezone.now() - timedelta(seconds=2)
+    recovery.save(update_fields=["token_created_at"])
+    expired = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**params, "new_password": "OtherSecure456!", "confirm_password": "OtherSecure456!"},
+        content_type="application/json",
+    )
+    assert expired.status_code == 400
+
+    settings.AUTH_PASSWORD_RECOVERY_TTL_SECONDS = 1800
+    recovery.token_created_at = timezone.now()
+    recovery.save(update_fields=["token_created_at"])
+    success = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**params, "new_password": "OtherSecure456!", "confirm_password": "OtherSecure456!"},
+        content_type="application/json",
+    )
+    reused = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**params, "new_password": "ThirdSecure789!", "confirm_password": "ThirdSecure789!"},
+        content_type="application/json",
+    )
+    assert success.status_code == 200
+    assert reused.status_code == 400
+    assert reused.json()["code"] == "invalid_or_expired_token"
+
+
+@pytest.mark.django_db
+def test_password_recovery_password_feedback_does_not_consume_token(client):
+    verified_recovery_user()
+    client.post(
+        "/api/auth/password-reset/request/",
+        {"email": "recovery@example.com"},
+        content_type="application/json",
+    )
+    _, params = recovery_params()
+    mismatch = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**params, "new_password": "OtherSecure456!", "confirm_password": "different"},
+        content_type="application/json",
+    )
+    weak = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**params, "new_password": "password", "confirm_password": "password"},
+        content_type="application/json",
+    )
+    recovery = PasswordRecoveryState.objects.get()
+    assert mismatch.status_code == 400
+    assert "confirm_password" in mismatch.json()
+    assert weak.status_code == 400
+    assert "new_password" in weak.json()
+    assert recovery.token_digest
+
+
+@pytest.mark.django_db
+def test_password_recovery_invalidated_by_email_or_password_change(client):
+    user = verified_recovery_user()
+    client.post(
+        "/api/auth/password-reset/request/",
+        {"email": user.email},
+        content_type="application/json",
+    )
+    _, email_params = recovery_params()
+    from accounts.services import change_email
+
+    change_email(user, "changed@example.com")
+    email_invalid = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**email_params, "new_password": "OtherSecure456!", "confirm_password": "OtherSecure456!"},
+        content_type="application/json",
+    )
+    assert email_invalid.status_code == 400
+
+    user.email = "recovery@example.com"
+    user.save(update_fields=["email"])
+    verification = user.email_verification
+    verification.normalized_email = user.email
+    verification.verified_at = timezone.now()
+    verification.save(update_fields=["normalized_email", "verified_at"])
+    client.post(
+        "/api/auth/password-reset/request/",
+        {"email": user.email},
+        content_type="application/json",
+    )
+    _, password_params = recovery_params()
+    user.set_password("ExternallyChanged456!")
+    user.save(update_fields=["password"])
+    password_invalid = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**password_params, "new_password": "OtherSecure456!", "confirm_password": "OtherSecure456!"},
+        content_type="application/json",
+    )
+    assert password_invalid.status_code == 400
+
+
+@pytest.mark.django_db
+def test_session_generation_claim_legacy_refresh_and_rotation(client):
+    user = verified_recovery_user()
+    login = client.post(
+        "/api/auth/token/",
+        {"username": user.username, "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    refresh = RefreshToken(login.cookies["refresh_token"].value)
+    assert refresh["session_generation"] == 0
+    assert AccountSecurityState.objects.get(user=user).session_generation == 0
+    rotated = client.post("/api/auth/refresh/")
+    assert rotated.status_code == 200
+    assert RefreshToken(rotated.cookies["refresh_token"].value)["session_generation"] == 0
+
+    legacy_client = Client()
+    legacy_client.cookies["refresh_token"] = str(RefreshToken.for_user(user))
+    assert legacy_client.post("/api/auth/refresh/").status_code == 200
+
+
+@pytest.mark.django_db
+def test_successful_reset_revokes_refresh_sessions_and_requires_login(client):
+    user = verified_recovery_user()
+    login = client.post(
+        "/api/auth/token/",
+        {"username": user.username, "password": "SecurePass123!"},
+        content_type="application/json",
+    )
+    old_refresh = login.cookies["refresh_token"].value
+    client.post(
+        "/api/auth/password-reset/request/",
+        {"email": user.email},
+        content_type="application/json",
+    )
+    _, params = recovery_params()
+    reset = client.post(
+        "/api/auth/password-reset/confirm/",
+        {**params, "new_password": "OtherSecure456!", "confirm_password": "OtherSecure456!"},
+        content_type="application/json",
+    )
+
+    assert reset.status_code == 200
+    assert reset.json() == {"code": "password_reset", "detail": "Password changed. Please log in."}
+    assert reset.cookies["refresh_token"]["max-age"] == 0
+    user.refresh_from_db()
+    assert user.check_password("OtherSecure456!")
+    assert AccountSecurityState.objects.get(user=user).session_generation == 1
+    assert BlacklistedToken.objects.filter(token__user=user).count() == OutstandingToken.objects.filter(user=user).count()
+
+    stale = Client()
+    stale.cookies["refresh_token"] = old_refresh
+    assert stale.post("/api/auth/refresh/").status_code == 401
+    legacy_after_reset = RefreshToken.for_user(user)
+    stale.cookies["refresh_token"] = str(legacy_after_reset)
+    assert stale.post("/api/auth/refresh/").status_code == 401
+    assert client.post(
+        "/api/auth/token/",
+        {"username": user.username, "password": "SecurePass123!"},
+        content_type="application/json",
+    ).status_code == 401
+    assert client.post(
+        "/api/auth/token/",
+        {"username": user.username, "password": "OtherSecure456!"},
+        content_type="application/json",
+    ).status_code == 200

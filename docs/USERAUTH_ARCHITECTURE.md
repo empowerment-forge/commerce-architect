@@ -43,6 +43,11 @@ All current authentication routes are mounted under `/api/auth/`:
     and explicitly reports sent, cooldown, verified, or delivery-failure states.
 -   `POST /api/auth/change-email/` requires JWT authentication, changes the
     current address, invalidates prior verification/tokens, and sends a new link.
+-   `POST /api/auth/password-reset/request/` returns the same 202 response for
+    every syntactically valid request and emails eligible verified accounts.
+-   `POST /api/auth/password-reset/confirm/` validates a one-time recovery token
+    and Django password policy, changes the password, revokes long-lived
+    sessions, and requires a normal login afterward.
 -   `POST /api/auth/token/` validates credentials, returns an access token in
     JSON, and sets the refresh token cookie.
 -   `POST /api/auth/refresh/` reads the refresh token from its cookie, returns a
@@ -82,6 +87,31 @@ variables. Resend SMTP is the currently tested example; the application has no
 provider SDK dependency. Verification links open the frontend `/verify-email`
 page, which removes the raw query token from browser history and submits
 verification by POST.
+
+## Password Recovery and Account Security State
+
+`accounts.PasswordRecoveryState` owns only recovery lifecycle data: a public
+UUID, current normalized-email binding, random-token digest, issue/send times,
+consumption time, and timestamps. Raw tokens have at least 256 bits of entropy,
+are sent only by email, expire after 30 minutes by default, and are never
+persisted. Reissue replaces the digest; successful consumption is single-use
+and atomic. Failed delivery conditionally clears its issued digest and restores
+the prior cooldown, permitting an immediate retry without changing the public
+response.
+
+`accounts.AccountSecurityState` separately owns the account-wide
+`session_generation` counter. Login places the current generation on the token
+pair. Cookie refresh compares it with current database state; missing claims and
+absent rows mean generation zero for rollout compatibility. Recovery increments
+the generation and blacklists outstanding refresh tokens, rejecting older
+long-lived sessions, including refreshes rotated around reset. Already-issued
+access tokens remain stateless for only their existing ten-minute maximum.
+
+Recovery targets only an address matching both `User.email` and verified
+`EmailVerification.normalized_email`. Email change invalidates recovery state;
+the password-hash-bound digest also invalidates a link after any external
+password change. Direct/admin password changes do not yet increment session
+generation; that broader revocation belongs to a later account-security slice.
 
 ## Access Token
 
