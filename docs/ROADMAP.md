@@ -90,10 +90,9 @@ real SMTP delivery through Resend has passed deployed development acceptance.
 
 ## Current Priority: Hosted-Development Operational Readiness
 
-Commerce Architect is deployed at
-[https://dev-commerce.empowerment-forge.com](https://dev-commerce.empowerment-forge.com)
-as an internet-facing, production-style **non-production** Railway environment.
-The current operational priority is making that working environment
+Commerce Architect has an internet-facing, production-style **non-production**
+hosted development environment. The current operational priority is making that
+working environment
 reproducible and observable while retaining HTTPS, non-production credentials,
 no real customer commerce data, and hardened Django runtime settings. The
 environment is not carrying revenue-critical production workloads.
@@ -148,7 +147,7 @@ work, especially where required to secure and validate the hosted environment.
 Password recovery is governed by
 [ai-prompts/auth-password-recovery.md](ai-prompts/auth-password-recovery.md) and
 is complete at milestone `milestone/auth-password-recovery`, including real
-Resend delivery, Railway acceptance, and
+SMTP delivery, deployed acceptance, and
 [13/13 UAT PASS](uat-testing/UAT_PASSWORD_RECOVERY.md).
 The existing backend foundation includes:
 

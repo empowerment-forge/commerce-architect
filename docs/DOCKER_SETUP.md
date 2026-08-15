@@ -8,9 +8,8 @@ Compose. The checked-in `docker-compose.yml` is compatible with both workflows;
 use the container runtime that fits your development environment.
 
 Hosted environments and CI do not use this Compose topology. See
-[BUILD_DEPLOY.md](BUILD_DEPLOY.md) and
-[ENVIRONMENT_PROVISIONING.md](ENVIRONMENT_PROVISIONING.md). Local Linux
-development can use Podman and Podman Compose without changing the Compose file.
+[BUILD_DEPLOY.md](BUILD_DEPLOY.md). Local Linux development can use Podman and
+Podman Compose without changing the Compose file.
 
 ------------------------------------------------------------------------
 
@@ -183,11 +182,9 @@ No external email provider is needed.
 
 For real SMTP UAT, copy `.env.example` to the ignored `.env`, select
 `django.core.mail.backends.smtp.EmailBackend`, and set the standard `SMTP_*`
-variables plus the verified `DEFAULT_FROM_EMAIL`. Resend is the currently tested
-example (`smtp.resend.com`, port `587`, username `resend`, TLS enabled), but the
-application has no Resend SDK or provider-specific integration. Put the actual
-SMTP password only in `.env`, then restart the web service. TLS and SSL cannot
-both be enabled.
+variables plus the verified `DEFAULT_FROM_EMAIL`. The application has no
+provider SDK dependency. Put the actual SMTP password only in `.env`, then
+restart the web service. TLS and SSL cannot both be enabled.
 
 Production rejects missing/insecure frontend URL, console/dummy/in-memory email
 backends, a local sender, incomplete SMTP credentials, and invalid SMTP options.
@@ -403,6 +400,12 @@ docker compose down
 Normal shutdown should use `stop` or `down` without `-v`. Both preserve the
 PostgreSQL data volume and frontend dependency volume.
 
+`postgres_data` is a Compose-managed named volume, not a fixed repository or
+host filesystem path. Its physical location depends on the container runtime
+and operating system. Inspect it through `docker volume ls` and
+`docker volume inspect`, or `podman volume ls` and `podman volume inspect`,
+rather than depending on an underlying host path.
+
 ------------------------------------------------------------------------
 
 # Full Volume Reset (Destructive)
@@ -450,8 +453,8 @@ After resetting the volume, apply migrations again before using the application.
     dependency changes are synchronized from `frontend/package-lock.json` by
     `npm ci` at container startup. Restarting `frontend` is sufficient after a
     lockfile change; deleting `frontend_node_modules` is not normally necessary.
--   This container runs the Vite development server only. Hosted development
-    uses the production frontend image, NGINX, and Railway-managed PostgreSQL as
+-   This container runs the Vite development server only. Hosted environments
+    use the production frontend image, NGINX, and persistent PostgreSQL as
     documented in [ARCHITECTURE.md](ARCHITECTURE.md). Local volumes and database
     credentials never transfer to hosted environments.
 -   GitHub Actions validates the production frontend and backend images directly;

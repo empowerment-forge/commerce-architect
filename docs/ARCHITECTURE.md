@@ -7,22 +7,17 @@ retained in [ARCHITECTURE_v1.2.md](ARCHITECTURE_v1.2.md).
 Browser
   │ HTTPS
   ▼
-dev-commerce.empowerment-forge.com
-  │
-  ▼
-Railway frontend: NGINX + React assets
+Frontend: NGINX + React assets
   ├── /             SPA and fallback
   ├── /api/         private proxy to Django
   ├── /admin/       private proxy to Django
   └── /static/      private proxy to Django/WhiteNoise
                           │
                           ▼
-                   Railway backend
-                   Gunicorn + Django/DRF
+                   Backend: Gunicorn + Django/DRF
                           │
                           ▼
-                 private Railway PostgreSQL
-                    persistent volume
+                   Private persistent PostgreSQL
 ```
 
 ## Boundaries
@@ -35,13 +30,12 @@ Railway frontend: NGINX + React assets
 - `backend/catalog/` owns the current commerce-domain API.
 - `backend/health/` owns database-aware readiness.
 - Django/WhiteNoise owns Django static files; the frontend image does not.
-- PostgreSQL is private persistent state. Railway variables reference its
-  credentials without copying them.
+- PostgreSQL owns persistent state and should remain privately reachable.
 
-The browser and API share one HTTPS origin. The backend may be independently
-deployable, but cross-site browser authentication is not a current requirement.
-Authentication uses short-lived JWT access tokens in memory and rotating
-refresh tokens in secure HttpOnly cookies; see
+The browser and API share one HTTPS origin. The frontend and backend may be
+deployed independently, but cross-site browser authentication is not a current
+requirement. Authentication uses short-lived JWT access tokens in memory and
+rotating refresh tokens in secure HttpOnly cookies; see
 [USERAUTH_ARCHITECTURE.md](USERAUTH_ARCHITECTURE.md).
 
 ## Application structure
@@ -63,12 +57,16 @@ the frontend direction and [ROADMAP.md](ROADMAP.md) for future commerce work.
 
 ## Deployment architecture
 
-GitHub Actions builds and validates each image once, publishes successful
-`develop` artifacts to GHCR by commit SHA, resolves immutable digests, and tells
-Railway to deploy those digests. Railway runs backend migrations before
-activation and health-checks both services. See
-[BUILD_DEPLOY.md](BUILD_DEPLOY.md).
+The frontend and backend are independently built OCI images. A deployment must
+provide HTTPS ingress, runtime configuration, private service networking,
+persistent PostgreSQL, pre-activation migrations, and health gates. The current
+frontend NGINX image provides same-origin routing to Django.
 
-The Railway environment is called `development`, but Django uses production
-security behavior. Hosted development contains no real customer data or
-production credentials. Local Compose remains a separate developer topology.
+GitHub Actions validates the exact production images and preserves immutable
+artifact identity. Provider selection, environment names, domains, credentials,
+and operator procedures are deployment-specific rather than application
+architecture. See [BUILD_DEPLOY.md](BUILD_DEPLOY.md).
+
+Hosted development uses production security behavior with non-production
+credentials and no real customer commerce data. Local Compose remains a
+separate developer topology.

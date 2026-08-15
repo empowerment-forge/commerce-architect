@@ -217,5 +217,4 @@ A normal frontend session is:
 This local development container is not the hosted frontend runtime. Hosted
 development builds React once and serves `dist` through NGINX; same-origin
 `/api/`, `/admin/`, and `/static/` requests are proxied privately to Django.
-Railway-managed PostgreSQL is persistent hosted state. See
-[ARCHITECTURE.md](ARCHITECTURE.md).
+Persistent PostgreSQL is hosted state. See [ARCHITECTURE.md](ARCHITECTURE.md).

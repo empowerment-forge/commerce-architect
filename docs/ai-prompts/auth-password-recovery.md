@@ -30,7 +30,7 @@ public recovery endpoint.
 - Django's stock `User`; do not introduce a custom user migration.
 - Accounts-owned verification and security lifecycle state.
 - Provider-neutral Django `MAILERS` delivery through the existing `send_mail()`
-  path. Resend SMTP remains a tested provider, not an application dependency.
+  path with no provider SDK dependency.
 - Ten-minute SimpleJWT access tokens held only in React memory.
 - Rotating, blacklisted seven-day refresh tokens in an HttpOnly cookie.
 - Startup session restoration and single-flight access refresh with one retry.
@@ -307,7 +307,7 @@ is the practical acceptance script. It covers:
   sessions, with access expiry documented;
 - absence of sensitive query data after frontend capture;
 - stale UI feedback cleanup and secondary login-panel presentation; and
-- final Railway/Resend delivery acceptance without committed credentials.
+- final hosted real-SMTP delivery acceptance without committed credentials.
 
 Automated tests should include transactional/concurrency cases for replacement,
 single use, email change, password change, refresh rotation around reset, and
@@ -344,8 +344,8 @@ Keep out of this slice:
 
 Throttle identity uses DRF's direct `REMOTE_ADDR` locally. In production it
 trusts exactly one forwarded proxy hop only when
-`DJANGO_TRUST_FORWARDED_PROTO=true`, matching the already-established Railway
-proxy assumption. A topology with another proxy hop requires a reviewed setting
+`DJANGO_TRUST_FORWARDED_PROTO=true`, matching the reviewed hosted proxy
+assumption. A topology with another proxy hop requires a reviewed setting
 change; this is modest abuse control, not a hard distributed rate limit.
 
 Direct/admin password changes invalidate outstanding recovery links through the
