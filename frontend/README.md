@@ -1,7 +1,8 @@
 # Commerce Architect Frontend
 
-React, TypeScript, and Vite implement the product catalog and the minimal
-registration, verification, login, account, email-change, and logout journey.
+React, TypeScript, and Vite implement the product catalog and the registration,
+verification, login, account, email-change, password-recovery, and logout
+journeys.
 
 ## Local development
 
@@ -21,8 +22,9 @@ npm run dev
 ```
 
 Access tokens remain in React memory and refresh cookies remain HttpOnly. The
-local console email backend prints verification links in backend logs. See the
-[frontend authentication pattern](../docs/FRONTEND_AUTH_PATTERN.md).
+local console email backend prints verification and recovery links in backend
+logs. See the
+[authentication architecture](../docs/USERAUTH_ARCHITECTURE.md).
 
 See [`../docs/UI_SETUP.md`](../docs/UI_SETUP.md) for proxy and troubleshooting
 details.

@@ -219,15 +219,18 @@ Capabilities listed as future work do not describe current repository behavior.
 The broader workflow documents and command surface remain planned; they do not
 exist as a standardized experience today.
 
-### Public Repository Readiness
+### Open-Source Governance
 
-Public repository readiness is a top near-term priority, not a post-product
-cleanup task. The license map, contribution guide, security policy, and current
-public-facing maturity language exist. Remaining work includes:
+The repository is public and stewarded by Empowerment Forge. Its component
+license map, temporary contribution policy, security-reporting policy, and
+public maturity statement are current. Remaining governance maturity work
+includes selecting a contributor-rights/CLA model before accepting external
+code, defining maintainer governance as participation grows, refining trademark
+and branding policy, and maturing dependency/license inventory practices.
 
-- A full repository and history secret/privacy audit
-- Issue and contributor hygiene
-- A final repository visibility review
+Future SDK, CLI, plugin, extension, and documentation licensing will be decided
+when those artifacts exist. These are current governance requirements, not
+pre-publication blockers or claims that the repository is still private.
 
 ### Product Work and Supporting Hardening
 

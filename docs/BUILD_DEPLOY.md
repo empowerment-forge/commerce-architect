@@ -57,8 +57,9 @@ Railway PostgreSQL is persistent application state on a volume mounted at
 uses Railway variable references; rendered credentials are never copied into
 source, documentation, or GitHub Actions.
 
-Local Compose PostgreSQL is disposable developer state and is documented only
-in [POSTGRES_SETUP.md](POSTGRES_SETUP.md).
+Local Compose PostgreSQL is disposable developer state. Its volume, migration,
+inspection, and reset procedures are documented in
+[DOCKER_SETUP.md](DOCKER_SETUP.md).
 
 ## CI trigger matrix
 

@@ -120,9 +120,10 @@ Open the following address in a browser:
 http://localhost:5173/
 ```
 
-The currently implemented UI is the Commerce Architect product-list frontend. It
-requests the product collection from the Django API and displays loading, error,
-empty, or product-card states based on the response.
+The implemented UI includes the product-list experience plus registration,
+email verification, login, account management, email change, password recovery,
+and logout. The product page displays loading, error, empty, or product-card
+states based on the Django API response.
 
 ## Frontend/backend development architecture
 

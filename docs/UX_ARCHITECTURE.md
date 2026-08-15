@@ -1,13 +1,16 @@
 
-# UX_ARCHITECTURE.md
-Version: 1.0
-Status: Strategic Commitment Document
+# Frontend and UX Architecture
+
+**Status:** Current strategic direction. For implemented runtime topology and
+authentication details, see [ARCHITECTURE.md](ARCHITECTURE.md) and
+[USERAUTH_ARCHITECTURE.md](USERAUTH_ARCHITECTURE.md).
 
 ---
 
 # 1. Purpose
 
-This document defines the long-term UX and frontend architectural direction for the Commerce Platform.
+This document defines the long-term UX and frontend architectural direction for
+Commerce Architect.
 
 It formalizes:
 
@@ -69,52 +72,17 @@ React is responsible for:
 
 ---
 
-# 4. Authentication Architecture
+# 4. Authentication Boundary
 
-## Phase 1 (Current)
+The frontend holds short-lived access tokens only in memory and leaves rotating
+refresh tokens in secure HttpOnly cookies. It attaches authorization headers,
+coordinates refresh/retry, and renders account journeys without owning identity
+or security decisions. The backend owns credentials, token lifecycle,
+verification, recovery, and authorization.
 
-Authentication model:
-- JWT-based authentication
-- SimpleJWT
-- Access + Refresh tokens
-- Refresh rotation enabled
-- Blacklisting enabled
-
-Flow:
-- User registers via /api/auth/register/
-- User obtains token via /api/auth/token/
-- Access token used in Authorization header:
-  Bearer <token>
-
-This is a backend-controlled token model.
-
-Frontend responsibility:
-- Store tokens securely (in memory preferred)
-- Attach Authorization header to API calls
-- Handle refresh rotation
-- Handle 401 responses gracefully
-
----
-
-## Phase 2 (Planned Evolution)
-
-Authentication will evolve to:
-
-Authorization Code Flow with PKCE
-OAuth 2.0 + OpenID Connect compliant
-
-Possible approaches:
-- Django OAuth Toolkit
-- External IdP (Auth0, Keycloak, etc.)
-- Dedicated authorization server
-
-Phase 2 Goals:
-- Standards compliance
-- Third-party integrations
-- Social login support
-- POS and mobile client compatibility
-
-The Phase 1 JWT architecture is designed to evolve cleanly into this model.
+[USERAUTH_ARCHITECTURE.md](USERAUTH_ARCHITECTURE.md) is the canonical source for
+the implemented endpoints, security properties, and possible OAuth 2.0/OIDC
+evolution.
 
 ---
 
@@ -162,7 +130,7 @@ Maintain architectural purity.
 
 ---
 
-Approved Direction:
+Current direction:
 React + Vite + TypeScript + Tailwind
 Django API-only
 JWT (Phase 1) → OAuth2 PKCE (Phase 2)

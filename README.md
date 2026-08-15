@@ -73,10 +73,11 @@ React Testing Library**.
 -   React component and API-client behavior
 -   Type correctness (e.g., Decimal enforcement)
 
-## What We Do NOT Test
+## What Requires Other Validation
 
 -   Django admin UI rendering
--   CSS or styling
+-   Pixel layout and responsive fit require real-browser/device acceptance;
+    component tests do not prove rendered dimensions
 -   Static branding assets
 
 Admin is treated as a management surface, not core business logic.
@@ -126,8 +127,9 @@ We follow a simplified GitFlow-inspired model.
 -   `develop`
     -   Integration branch
     -   All features merge here first
--   `feature/<name>`
-    -   One feature per branch
+-   Focused topic branches such as `feature/<name>`, `fix/<name>`, or
+    `docs/<name>`
+    -   One focused change per branch
     -   Must open PR into `develop`
 
 ------------------------------------------------------------------------
@@ -145,7 +147,7 @@ We do **not** run CI on every push to feature branches.
 
 Even as a solo developer:
 
--   All feature work happens on a feature branch.
+-   All changes happen on a focused topic branch.
 -   All changes go through PR review (even if self-reviewed).
 -   CI must pass before merge.
 
@@ -156,7 +158,7 @@ project grows.
 
 # Current Architecture Stack
 
-Backend: - Django 6.x - Django REST Framework - PostgreSQL 16
+Backend: - Django 6.1 - Django REST Framework - PostgreSQL 16
 
 Frontend: - React - TypeScript - Vite - Tailwind CSS
 
@@ -206,6 +208,8 @@ development and the optional native Vite workflow.
     daily workflow
 -   [Validation and PR reporting standards](docs/VALIDATION_STANDARDS.md) —
     canonical validation-summary structure and reporting rules
+-   [Testing strategy](docs/TESTING_STRATEGY.md) — maintained automated test
+    layers, production-image checks, and human-validation boundaries
 -   [Docker and Podman setup](docs/DOCKER_SETUP.md) — local services,
     configuration, and checks
 -   [Current hosted architecture](docs/ARCHITECTURE.md) — canonical runtime
@@ -215,18 +219,22 @@ development and the optional native Vite workflow.
 -   [Platform philosophy](docs/PLATFORM_PHILOSOPHY.md) — enduring project and
     adoption principles
 -   [Product roadmap](docs/ROADMAP.md) — current implementation and next steps
+-   [Authentication architecture](docs/USERAUTH_ARCHITECTURE.md) — current
+    account, token, verification, and recovery design
+-   [Frontend and UX direction](docs/UX_ARCHITECTURE.md) — frontend technology,
+    responsibility, and experience guardrails
 -   [Build and deployment guide](docs/BUILD_DEPLOY.md) — current build and
     normal deployment contract
 -   [Environment provisioning](docs/ENVIRONMENT_PROVISIONING.md) — repeatable
     Railway environment bootstrap
 -   [Operations runbook](docs/OPERATIONS.md) — status, verification, recovery,
     and credential procedures
--   [Registration and email-verification UAT](docs/uat-testing/UAT_REGISTRATION_VERIFICATION.md)
-    — repeatable manual acceptance checklist for the authentication slice
--   [Public-readiness roadmap](docs/COMMERCE_ARCHITECT_PUBLIC_ROADMAP.md) —
-    publication checklist and remaining release actions
 -   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and
     [security policy](SECURITY.md) — repository policies
+
+Milestone-specific implementation assignments and UAT records remain under
+`docs/ai-prompts/` and `docs/uat-testing/`. They preserve implementation and
+acceptance history; the current-state documents above take precedence.
 
 ------------------------------------------------------------------------
 
