@@ -102,11 +102,13 @@ jobs:
               --header 'X-Forwarded-Proto: https' \
               "http://127.0.0.1:8080/${prefix}")
             test "${status}" = "308"
-            grep --quiet --ignore-case \
-              --regexp="^Location: /${prefix}/\r\?$" "${headers}"
-            if grep --quiet --ignore-case \
-              --regexp='^Location:.*\(http://\|:8080\|backend-smoke\)' \
-              "${headers}"; then
+            location=$(awk 'tolower($1) == "location:" {
+              sub(/\r$/, "", $2); print $2
+            }' "${headers}")
+            test "${location}" = "/${prefix}/"
+            if [[ "${location}" == http://* \
+              || "${location}" == *:8080* \
+              || "${location}" == *backend-smoke* ]]; then
               echo "Unsafe bare-prefix redirect: /${prefix}"
               cat "${headers}"
               exit 1
