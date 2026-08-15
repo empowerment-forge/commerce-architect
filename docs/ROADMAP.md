@@ -25,42 +25,36 @@ materially change. Do not use it as a duplicate backlog.
 ```text
                     CURRENT STATE
 
-                        Browser
-                           │
-                           │
-                    React / Vite
-                           │
-                           │
-              ┌────────────┴────────────┐
-              │                         │
-      Product UI works             Auth UI works
-              │                         │
-              │
-      GET /api/products/
-              │
-              ▼
-          Django / DRF
-              │
-      ┌───────┴─────────────────────┐
-      │                             │
-   catalog                        accounts
-      │                             │
-products API              register  ✅
-                          verify    ✅
-                          email change ✅
-                          login     ✅
-                          refresh   ✅
-                          logout    ✅
-                          /me       ✅
-                          recovery  ✅
+                         Browser
+                            │
+                      React / Vite
+                            │
+             ┌──────────────┴──────────────┐
+             │                             │
+     Product / Catalog UI       Authentication / Account UX
+             │                             │
+     products UI + API          Registration / Verification ✅
+                                     register • verify • resend
+                                Session ✅
+                                     login • silent renewal • logout
+                                Account ✅
+                                     /me • email change / reverification
+                                Recovery ✅
+                                     forgot/reset • account-wide revocation
+             │                             │
+             └──────────────┬──────────────┘
+                            ▼
+                       Django / DRF
+                    catalog + accounts
+                            │
+                        PostgreSQL
 ```
 
-The catalog has an end-to-end vertical slice that is visible in the browser.
-Authentication now has a complete first user-facing foundation: registration,
-email verification and resend, login, `/me`, email change/reverification,
-access-token refresh/retry, logout, and password recovery/reset are connected
-through the React frontend. Recovery revokes account-wide refresh sessions, and
-real SMTP delivery through Resend has passed deployed development acceptance.
+The catalog has an end-to-end browser-to-database vertical slice.
+Authentication provides connected registration, verification, session, account,
+and recovery journeys through the React frontend. Silent access-token
+refresh/retry, account-wide refresh-session revocation after recovery, and real
+email delivery have passed deployed development acceptance.
 
 ## Current Major Capabilities
 
@@ -135,34 +129,20 @@ non-production environment to production readiness.
 
 ## Existing Authentication Foundation
 
-**COMPLETE:** The independently testable user-facing foundation includes
-registration, email verification and resend, authenticated email change and
-reverification, hybrid-JWT login/logout and `/me`, access-token refresh/retry,
-and password recovery/reset. Its registration and verification acceptance
-contract is
+**COMPLETE:** The user-facing foundation covers registration and verification
+with resend; login, logout, `/me`, and silent access-token refresh/retry;
+authenticated email change and reverification; and password recovery/reset with
+account-wide refresh-session revocation. Its registration and verification
+acceptance contract is
 [ai-prompts/auth-registration-verification.md](ai-prompts/auth-registration-verification.md).
 
 Authentication and the broader account lifecycle remain important platform
 work, especially where required to secure and validate the hosted environment.
 Password recovery is governed by
 [ai-prompts/auth-password-recovery.md](ai-prompts/auth-password-recovery.md) and
-is complete at milestone `milestone/auth-password-recovery`, including real
-SMTP delivery, deployed acceptance, and
+is complete at milestone `milestone/auth-password-recovery`, including deployed
+real-email acceptance and
 [13/13 UAT PASS](uat-testing/UAT_PASSWORD_RECOVERY.md).
-The existing backend foundation includes:
-
-- Registration endpoint
-- Email verification and enumeration-resistant resend
-- Authenticated email change and reverification
-- Login/token endpoint
-- Short-lived JWT access token
-- HttpOnly refresh-token cookie
-- Refresh rotation and blacklisting
-- Logout
-- Authenticated `/api/auth/me/` endpoint
-- Frontend authentication, recovery, and account-management UI
-- Enumeration-resistant, expiring, single-use password recovery with cooldowns
-- Account-wide session-generation revocation after password reset
 
 The major incomplete areas are:
 
@@ -195,15 +175,10 @@ Capabilities listed as future work do not describe current repository behavior.
 
 ### Developer + Adopter Experience
 
-- **COMPLETE:** The Django / DRF backend now lives under `backend/`, with
-  `backend/` and `frontend/` as explicit sibling application boundaries. The
-  refactor preserved runtime behavior, APIs, Compose topology, CI behavior,
-  database state, tests, and frontend behavior. This structure prepares
-  Commerce Architect for future component-specific licensing and possible
-  repository extraction.
-- Establish a repeatable local development workflow and document it in a future
-  `DEV_WORKFLOW.md`.
-- Introduce a small task command surface, potentially including `dev-up`,
+- **COMPLETE:** `backend/` and `frontend/` are explicit sibling application
+  boundaries with documented Docker/Podman Compose startup, testing, onboarding,
+  and validation workflows.
+- Consider a small convenience command surface, potentially including `dev-up`,
   `dev-down`, `dev-status`, `logs`, and `test`, without obscuring the underlying
   operations.
 - Reduce developer onboarding friction while keeping setup reproducible and
@@ -214,9 +189,6 @@ Capabilities listed as future work do not describe current repository behavior.
 - Define the production adoption and bootstrap workflow.
 - Progressively automate configuration, deployment, domain and TLS setup,
   health verification, and operational startup where appropriate.
-
-The broader workflow documents and command surface remain planned; they do not
-exist as a standardized experience today.
 
 ### Open-Source Governance
 
