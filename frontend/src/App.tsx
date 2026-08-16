@@ -308,12 +308,14 @@ function AccountPanel({ request, user, onUserChange, onLogout, onClose }: Accoun
   if (settingsOpen) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold">Update account</h2>
             <p className="mt-2"><span className="font-medium">Current email:</span> {user.email}</p>
           </div>
-          <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium disabled:opacity-60" disabled={emailBusy} onClick={closeSettings} type="button">Back to account</button>
+          <div aria-label="Update account actions" className="flex flex-wrap gap-3" role="group">
+            <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium disabled:opacity-60" disabled={emailBusy} onClick={closeSettings} type="button">Back to account</button>
+          </div>
         </div>
         {!changeEmailOpen ? (
           <button
@@ -329,7 +331,7 @@ function AccountPanel({ request, user, onUserChange, onLogout, onClose }: Accoun
               New email
               <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="email" required type="email" />
             </label>
-            <div className="mt-3 flex gap-3">
+            <div aria-label="Change email actions" className="mt-3 flex flex-wrap gap-3" role="group">
               <button className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={emailBusy} type="submit">{emailBusy ? "Changing…" : "Send verification to new email"}</button>
               <button className="rounded-md border border-slate-300 px-4 py-2 font-medium disabled:opacity-60" disabled={emailBusy} onClick={() => { clearFeedback(); setChangeEmailOpen(false); }} type="button">Cancel</button>
             </div>
