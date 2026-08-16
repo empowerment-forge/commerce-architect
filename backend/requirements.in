@@ -1,0 +1,11 @@
+# Application runtime
+Django>=6.1,<6.2
+djangorestframework
+djangorestframework-simplejwt
+gunicorn
+psycopg2-binary
+whitenoise>=6.12,<7
+
+# Test tooling (the production image is also the CI/test image)
+pytest
+pytest-django

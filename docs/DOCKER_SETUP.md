@@ -75,11 +75,12 @@ Use `podman-compose` for application lifecycle and orchestration (`up`, `start`,
 tools inside the deliberately named running containers: `commerce_web`,
 `commerce_db`, and `commerce_frontend`.
 
-Do not use `podman-compose exec`. Older wrappers may echo a generated command
-containing expanded environment values; direct `podman exec` uses the existing
-container and avoids that project-observed disclosure path. The ignored `.env`
-file remains the supported location for local secret overrides. Never print a
-resolved container environment while handling real credentials.
+Commerce Architect observed `podman-compose` 1.0.6 echoing a generated `exec`
+command containing expanded environment values. Version 1.6.0 was manually
+verified not to exhibit that behavior. The project nevertheless uses direct
+`podman exec` for commands in running containers and `podman-compose` for
+lifecycle/orchestration. The ignored `.env` file remains the supported location
+for local secret overrides; it was not the cause of the observed disclosure.
 
 ## Windows / WSL2 / Docker Desktop
 
@@ -297,6 +298,29 @@ normal source-code edit does not require a rebuild because the backend and
 frontend source directories are bind-mounted. A frontend lockfile change
 requires only a frontend restart; startup `npm ci` synchronizes the dependency
 volume.
+
+## Updating Python dependencies
+
+Declare direct backend and test dependencies in `backend/requirements.in`.
+`backend/requirements.txt` is the generated, committed lock consumed by the
+backend image, local Compose, and CI; do not edit its transitive pins by hand.
+
+From the repository root, regenerate it with the supported Python 3.12 and the
+documented compiler version:
+
+```bash
+python3.12 -m venv .venv-lock
+.venv-lock/bin/python -m pip install pip-tools==7.5.2
+.venv-lock/bin/pip-compile --strip-extras \
+    --output-file=backend/requirements.txt \
+    backend/requirements.in
+```
+
+Review changes to both requirements files, rebuild with
+`podman-compose up --build -d` (or `docker compose up --build -d`), then run the
+backend test, Django check, and migration-consistency commands above. To upgrade
+all allowed dependencies intentionally, rerun the final command with
+`--upgrade`; to upgrade one package, use `--upgrade-package PACKAGE`.
 
 ------------------------------------------------------------------------
 
