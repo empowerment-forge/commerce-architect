@@ -64,7 +64,7 @@ PostgreSQL.
 5.  Apply the checked-in Django migrations:
 
     ```bash
-    podman-compose exec web python manage.py migrate
+    podman exec -it commerce_web python manage.py migrate
     ```
 
     or:
@@ -74,7 +74,8 @@ PostgreSQL.
     ```
 
 6.  Verify the services and open the application using the URLs below. Then see
-    [DOCKER_SETUP.md](DOCKER_SETUP.md) for daily Compose operations and
+    [DOCKER_SETUP.md](DOCKER_SETUP.md) for the Podman execution convention and
+    daily Compose operations, and
     [UI_SETUP.md](UI_SETUP.md) for frontend behavior and optional native Vite
     development.
 

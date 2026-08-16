@@ -186,14 +186,16 @@ Backend authentication tests run in the `web` container. With Docker Compose:
 docker compose exec -T web pytest
 ```
 
-With Podman Compose, the local equivalent is:
+With Podman, run the test command directly in the existing container:
 
 ```bash
-podman-compose exec -T web pytest
+podman exec -i commerce_web pytest
 ```
 
 GitHub Actions runs these tests against the validated production backend image
-with disposable PostgreSQL. Compose remains the supported local workflow.
+with disposable PostgreSQL. Compose remains the supported local orchestration
+workflow; [DOCKER_SETUP.md](DOCKER_SETUP.md) defines the safe execution
+convention.
 
 ## Deployment Topology and BFF Evolution
 
