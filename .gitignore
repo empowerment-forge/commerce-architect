@@ -5,6 +5,7 @@
 
 # python
 .venv/
+.venv-lock/
 venv/
 env/
 __pycache__/
