@@ -378,6 +378,35 @@ describe("App authentication flow", () => {
     expect(screen.getByRole("button", { name: "alice" })).toBeInTheDocument();
   });
 
+  it("keeps Update Account actions responsive and returns to the Account panel", async () => {
+    mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response(verifiedUser),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    await user.click(screen.getByRole("button", { name: "Update account" }));
+
+    expect(screen.getByRole("heading", { name: "Update account" })).toBeInTheDocument();
+    const updateActions = screen.getByRole("group", { name: "Update account actions" });
+    expect(updateActions).toHaveClass("flex", "flex-wrap", "gap-3");
+    expect(updateActions.parentElement).toHaveClass("flex", "flex-wrap", "gap-4");
+    const backButton = within(updateActions).getByRole("button", { name: "Back to account" });
+    expect(backButton).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Change email" }));
+    const changeEmailActions = screen.getByRole("group", { name: "Change email actions" });
+    expect(changeEmailActions).toHaveClass("flex", "flex-wrap", "gap-3");
+    expect(within(changeEmailActions).getByRole("button", { name: "Send verification to new email" })).toBeInTheDocument();
+    expect(within(changeEmailActions).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+
+    await user.click(backButton);
+    expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Update account" })).not.toBeInTheDocument();
+  });
+
   it("restores /me from one refresh-cookie request", async () => {
     const fetchMock = mockApi({
       "/api/auth/refresh/": () => response({ access: "restored-token" }),
