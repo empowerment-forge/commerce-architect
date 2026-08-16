@@ -68,6 +68,19 @@ podman-compose --version
 
 The Compose file uses OCI-compatible images and works with Podman Compose.
 
+### Podman command convention
+
+Use `podman-compose` for application lifecycle and orchestration (`up`, `start`,
+`stop`, `down`, `ps`, and `logs`). Use direct `podman exec` commands to run
+tools inside the deliberately named running containers: `commerce_web`,
+`commerce_db`, and `commerce_frontend`.
+
+Do not use `podman-compose exec`. Older wrappers may echo a generated command
+containing expanded environment values; direct `podman exec` uses the existing
+container and avoids that project-observed disclosure path. The ignored `.env`
+file remains the supported location for local secret overrides. Never print a
+resolved container environment while handling real credentials.
+
 ## Windows / WSL2 / Docker Desktop
 
 Install Docker Desktop, enable WSL2 integration for the distribution containing
@@ -216,13 +229,14 @@ deliberate CORS and CSRF review; `SameSite=None` is not a default.
 Run the ordinary and deployment-oriented Django checks with:
 
 ```bash
-podman-compose exec -T web python manage.py check
-podman-compose exec -T web python manage.py check --deploy
+podman exec -i commerce_web python manage.py check
+podman exec -i commerce_web python manage.py check --deploy
 ```
 
-Use `docker compose` in place of `podman-compose` for Docker. The deployment
-check must also run in the real production environment so it evaluates the
-production variables rather than the intentionally relaxed development values.
+Docker users may instead run `docker compose exec -T web` followed by the same
+command. The deployment check must also run in the real production environment
+so it evaluates production variables rather than the intentionally relaxed
+development values.
 
 ------------------------------------------------------------------------
 
@@ -265,12 +279,14 @@ runtime selected during onboarding.
 | Follow all logs | `podman-compose logs -f` | `docker compose logs -f` |
 | Follow Django logs | `podman-compose logs -f web` | `docker compose logs -f web` |
 | Follow frontend logs | `podman-compose logs -f frontend` | `docker compose logs -f frontend` |
-| Run backend tests | `podman-compose exec -T web pytest` | `docker compose exec -T web pytest` |
-| Run frontend tests | `podman-compose exec -T frontend npm run test -- --run` | `docker compose exec -T frontend npm run test -- --run` |
-| Build the frontend | `podman-compose exec -T frontend npm run build` | `docker compose exec -T frontend npm run build` |
-| Lint the frontend | `podman-compose exec -T frontend npm run lint` | `docker compose exec -T frontend npm run lint` |
-| Apply Django migrations | `podman-compose exec web python manage.py migrate` | `docker compose exec web python manage.py migrate` |
-| Open the Django shell | `podman-compose exec web python manage.py shell` | `docker compose exec web python manage.py shell` |
+| Run backend tests | `podman exec -i commerce_web pytest` | `docker compose exec -T web pytest` |
+| Run Django checks | `podman exec -i commerce_web python manage.py check` | `docker compose exec -T web python manage.py check` |
+| Check migration consistency | `podman exec -i commerce_web python manage.py makemigrations --check --dry-run` | `docker compose exec -T web python manage.py makemigrations --check --dry-run` |
+| Run frontend tests | `podman exec -i commerce_frontend npm run test -- --run` | `docker compose exec -T frontend npm run test -- --run` |
+| Build the frontend | `podman exec -i commerce_frontend npm run build` | `docker compose exec -T frontend npm run build` |
+| Lint the frontend | `podman exec -i commerce_frontend npm run lint` | `docker compose exec -T frontend npm run lint` |
+| Apply Django migrations | `podman exec -it commerce_web python manage.py migrate` | `docker compose exec web python manage.py migrate` |
+| Open the Django shell | `podman exec -it commerce_web python manage.py shell` | `docker compose exec web python manage.py shell` |
 | Synchronize changed frontend dependencies | `podman-compose restart frontend` | `docker compose restart frontend` |
 
 After `backend/Dockerfile`, a Compose service, or another image-build change,
@@ -292,7 +308,7 @@ are added.
 With Podman Compose:
 
 ```bash
-podman-compose exec web python manage.py migrate
+podman exec -it commerce_web python manage.py migrate
 ```
 
 With Docker Compose:
@@ -305,7 +321,7 @@ When intentionally changing Django models, generate migration files with the
 corresponding runtime command:
 
 ```bash
-podman-compose exec web python manage.py makemigrations
+podman exec -it commerce_web python manage.py makemigrations
 ```
 
 or:
@@ -324,7 +340,7 @@ applies checked-in migration instructions to PostgreSQL.
 With Podman Compose:
 
 ```bash
-podman-compose exec web python manage.py createsuperuser
+podman exec -it commerce_web python manage.py createsuperuser
 ```
 
 With Docker Compose:
@@ -346,7 +362,7 @@ http://localhost:8000/admin/
 With Podman Compose:
 
 ```bash
-podman-compose exec db psql -U commerce -d commerce_db
+podman exec -it commerce_db psql -U commerce -d commerce_db
 ```
 
 With Docker Compose:
