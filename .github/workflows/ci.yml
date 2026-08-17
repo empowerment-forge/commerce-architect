@@ -175,6 +175,9 @@ jobs:
       - name: Build backend image once
         run: docker build --tag "${BACKEND_IMAGE}:${GITHUB_SHA}" backend
 
+      - name: Build frontend image for proxy integration
+        run: docker build --tag "${FRONTEND_IMAGE}:${GITHUB_SHA}" frontend
+
       - name: Start CI PostgreSQL
         run: |
           docker network create commerce-backend-ci
@@ -205,7 +208,7 @@ jobs:
             --env COMMERCE_ENV=production
             --env DJANGO_SECRET_KEY="${CI_SECRET_KEY}"
             --env DJANGO_DEBUG=false
-            --env "DJANGO_ALLOWED_HOSTS=healthcheck.railway.app,localhost,testserver"
+            --env "DJANGO_ALLOWED_HOSTS=commerce.example,healthcheck.railway.app,localhost,testserver"
             --env DJANGO_CSRF_TRUSTED_ORIGINS=https://localhost
             --env DJANGO_TRUST_FORWARDED_PROTO=true
             --env DJANGO_SECURE_SSL_REDIRECT=false
@@ -234,6 +237,9 @@ jobs:
             "${image}" python manage.py check --deploy
           docker run --rm "${runtime_environment[@]}" \
             "${image}" python manage.py migrate --noinput
+          docker run --rm "${runtime_environment[@]}" \
+            "${image}" python manage.py shell --command \
+            "from django.contrib.auth import get_user_model; get_user_model().objects.create_superuser('admin-csrf-smoke', 'admin-csrf@example.invalid', 'ci-only-admin-password')"
 
           docker run --detach \
             --name commerce-backend-app \
@@ -270,6 +276,26 @@ jobs:
             --header 'X-Forwarded-Proto: https' \
             http://127.0.0.1:8000/static/admin/css/base.css \
             >/dev/null
+
+          docker run --detach \
+            --name commerce-frontend-proxy \
+            --network commerce-backend-ci \
+            --publish 8080:8080 \
+            --env PORT=8080 \
+            --env BACKEND_HOST=commerce-backend-app \
+            --env BACKEND_PORT=8000 \
+            "${FRONTEND_IMAGE}:${GITHUB_SHA}"
+          for _ in {1..30}; do
+            if curl --fail --silent --show-error \
+              http://127.0.0.1:8080/ >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          ADMIN_SMOKE_USERNAME=admin-csrf-smoke \
+            ADMIN_SMOKE_PASSWORD=ci-only-admin-password \
+            PUBLIC_HOST=commerce.example \
+            scripts/admin-csrf-smoke.sh
 
       - name: Scan exact backend image
         uses: aquasecurity/trivy-action@v0.36.0
