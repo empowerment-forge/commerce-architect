@@ -208,7 +208,7 @@ jobs:
             --env COMMERCE_ENV=production
             --env DJANGO_SECRET_KEY="${CI_SECRET_KEY}"
             --env DJANGO_DEBUG=false
-            --env "DJANGO_ALLOWED_HOSTS=healthcheck.railway.app,localhost,testserver"
+            --env "DJANGO_ALLOWED_HOSTS=commerce.example,healthcheck.railway.app,localhost,testserver"
             --env DJANGO_CSRF_TRUSTED_ORIGINS=https://localhost
             --env DJANGO_TRUST_FORWARDED_PROTO=true
             --env DJANGO_SECURE_SSL_REDIRECT=false
