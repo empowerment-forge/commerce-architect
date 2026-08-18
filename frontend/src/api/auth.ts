@@ -4,6 +4,9 @@ import type { AuthenticatedRequester } from "./client";
 export type AuthUser = {
   id: number;
   username: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
   email: string;
   email_verified: boolean;
   email_verified_at: string | null;
@@ -12,6 +15,9 @@ export type AuthUser = {
 export type RegistrationResult = {
   id: number;
   username: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
   email: string;
   email_verified: false;
   detail: string;
@@ -25,10 +31,24 @@ export type VerificationResult = {
   verified_at: string;
 };
 
-export function registerAccount(username: string, email: string, password: string) {
+export function registerAccount(
+  username: string,
+  firstName: string,
+  lastName: string,
+  phone: string,
+  email: string,
+  password: string,
+) {
   return apiRequest<RegistrationResult>("/api/auth/register/", {
     method: "POST",
-    body: { username, email, password },
+    body: {
+      username,
+      first_name: firstName,
+      last_name: lastName,
+      phone,
+      email,
+      password,
+    },
   });
 }
 
@@ -75,6 +95,42 @@ export function changeEmail(request: AuthenticatedRequester, email: string) {
   return request<{ email: string; email_verified: false; detail: string }>(
     "/api/auth/change-email/",
     { method: "POST", body: { email } },
+  );
+}
+
+export function updatePersonalInformation(
+  request: AuthenticatedRequester,
+  firstName: string,
+  lastName: string,
+  phone: string,
+) {
+  return request<{
+    first_name: string;
+    last_name: string;
+    phone: string;
+    detail: string;
+  }>("/api/auth/me/", {
+    method: "PATCH",
+    body: { first_name: firstName, last_name: lastName, phone },
+  });
+}
+
+export function changePassword(
+  request: AuthenticatedRequester,
+  currentPassword: string,
+  newPassword: string,
+  newPasswordConfirmation: string,
+) {
+  return request<{ code: "password_changed"; detail: string }>(
+    "/api/auth/password-change/",
+    {
+      method: "POST",
+      body: {
+        current_password: currentPassword,
+        new_password: newPassword,
+        new_password_confirmation: newPasswordConfirmation,
+      },
+    },
   );
 }
 

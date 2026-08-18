@@ -10,9 +10,11 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
-from .models import EmailVerification
+from .models import AccountProfile, EmailVerification
 from .serializers import (
+    AccountIdentitySerializer,
     ChangeEmailSerializer,
+    PasswordChangeSerializer,
     PasswordRecoveryConfirmSerializer,
     PasswordRecoveryRequestSerializer,
     RegisterSerializer,
@@ -22,6 +24,8 @@ from .serializers import (
     VerifyEmailSerializer,
 )
 from .services import (
+    InvalidCurrentPassword,
+    change_password_and_revoke_sessions,
     change_email,
     consume_password_recovery,
     is_verified,
@@ -29,6 +33,7 @@ from .services import (
     release_failed_password_recovery_delivery,
     request_password_recovery,
     resend_verification,
+    resolve_login_user,
     send_verification_email,
     send_password_recovery_email,
     verification_metadata,
@@ -96,6 +101,11 @@ class RegisterView(APIView):
             {
                 "id": user.id,
                 "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": getattr(
+                    getattr(user, "account_profile", None), "phone", ""
+                ),
                 "email": user.email,
                 "email_verified": False,
                 "detail": "Registration succeeded. Check your email to verify the account.",
@@ -207,11 +217,14 @@ class TokenObtainCookieView(APIView):
 
     def post(self, request):
         if settings.AUTH_REQUIRE_VERIFIED_EMAIL:
-            user = authenticate(
-                request=request,
-                username=request.data.get("username"),
-                password=request.data.get("password"),
-            )
+            resolved_user = resolve_login_user(request.data.get("username"))
+            user = None
+            if resolved_user is not None:
+                user = authenticate(
+                    request=request,
+                    username=resolved_user.username,
+                    password=request.data.get("password"),
+                )
             if user is not None and not is_verified(user):
                 return Response(
                     {
@@ -221,7 +234,9 @@ class TokenObtainCookieView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        serializer = SessionTokenObtainPairSerializer(data=request.data)
+        serializer = SessionTokenObtainPairSerializer(
+            data=request.data, context={"request": request}
+        )
         serializer.is_valid(raise_exception=True)
 
         response = Response(
@@ -281,16 +296,82 @@ class MeView(APIView):
 
     def get(self, request):
         email_verified, verified_at = verification_metadata(request.user)
+        phone = (
+            AccountProfile.objects.filter(user=request.user)
+            .values_list("phone", flat=True)
+            .first()
+            or ""
+        )
         return Response(
             {
                 "id": request.user.id,
                 "username": request.user.username,
+                "first_name": request.user.first_name,
+                "last_name": request.user.last_name,
+                "phone": phone,
                 "email": request.user.email,
                 "email_verified": email_verified,
                 "email_verified_at": verified_at,
             },
             status=status.HTTP_200_OK,
         )
+
+    def patch(self, request):
+        serializer = AccountIdentitySerializer(
+            request.user,
+            data=request.data,
+            partial=False,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        phone = (
+            AccountProfile.objects.filter(user=user)
+            .values_list("phone", flat=True)
+            .first()
+            or ""
+        )
+        return Response(
+            {
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": phone,
+                "detail": "Personal information updated.",
+            }
+        )
+
+
+class PasswordChangeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            change_password_and_revoke_sessions(
+                request.user.pk,
+                serializer.validated_data["current_password"],
+                serializer.validated_data["new_password"],
+            )
+        except InvalidCurrentPassword:
+            return Response(
+                {"current_password": ["Current password is incorrect."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        response = Response(
+            {
+                "code": "password_changed",
+                "detail": "Password changed successfully. Please sign in again.",
+            }
+        )
+        response.delete_cookie(
+            key=REFRESH_COOKIE_NAME,
+            path=settings.REFRESH_COOKIE_PATH,
+            samesite=settings.REFRESH_COOKIE_SAMESITE,
+        )
+        return response
 
 
 class ChangeEmailView(APIView):

@@ -30,9 +30,9 @@ Connect in a later phase.
 
 All current authentication routes are mounted under `/api/auth/`:
 
--   `POST /api/auth/register/` creates a user and returns the new user's ID,
-    username, normalized email, and unverified status. It validates the password,
-    sends a verification email, and does not issue tokens.
+-   `POST /api/auth/register/` creates a user with required first and last names,
+    an optional account-profile phone number, and a unique normalized email. It
+    validates the password, sends a verification email, and does not issue tokens.
 -   `POST /api/auth/verify-email/` consumes an expiring, single-use token and
     verifies the exact normalized address to which it was issued.
 -   `POST /api/auth/resend-verification/` returns an enumeration-resistant
@@ -49,14 +49,21 @@ All current authentication routes are mounted under `/api/auth/`:
     and Django password policy, changes the password, revokes long-lived
     sessions, and requires a normal login afterward.
 -   `POST /api/auth/token/` validates credentials, returns an access token in
-    JSON, and sets the refresh token cookie.
+    JSON, and sets the refresh token cookie. Its backward-compatible `username`
+    request field accepts either the username or normalized email identity.
 -   `POST /api/auth/refresh/` reads the refresh token from its cookie, returns a
     new access token in JSON, and rotates the refresh token cookie when a new
     refresh token is issued.
 -   `POST /api/auth/logout/` blacklists a valid refresh token when present and
     clears the refresh token cookie.
 -   `GET /api/auth/me/` requires JWT authentication and returns the authenticated
-    user's ID, username, current email, and matching verification metadata.
+    user's ID, username, first and last names, optional phone, current email, and
+    matching verification metadata.
+-   `PATCH /api/auth/me/` updates only the authenticated user's first name, last
+    name, and optional phone. Email and credential changes are separate operations.
+-   `POST /api/auth/password-change/` verifies the current password, enforces the
+    configured Django password policy, changes the password, and ends all refresh
+    sessions so the user must sign in again.
 
 There is no `/api/auth/login/` endpoint. Login and initial token issuance use
 `POST /api/auth/token/`.
@@ -74,6 +81,13 @@ the new address to verify independently. Old-address links cannot verify the
 account, and resend targets only the current address. Existing JWT sessions are
 not automatically revoked by an address change; `/me` immediately reports the
 new address as unverified.
+
+`User.first_name` and `User.last_name` hold account names; no duplicate name
+columns or custom user model are introduced. `accounts.AccountProfile` is a
+small optional one-to-one extension that holds only the account phone number.
+Existing users may retain blank names and no profile row. New registration and
+profile updates require nonblank names, while a blank submitted phone preserves
+the currently stored value. This account profile is not a commerce Customer.
 
 `AUTH_REQUIRE_VERIFIED_EMAIL` controls credential-login enforcement. It defaults
 to false for migration compatibility, while local Compose enables it for the
@@ -101,16 +115,19 @@ response.
 `accounts.AccountSecurityState` separately owns the account-wide
 `session_generation` counter. Login places the current generation on the token
 pair. Cookie refresh compares it with current database state; missing claims and
-absent rows mean generation zero for rollout compatibility. Recovery increments
-the generation and blacklists outstanding refresh tokens, rejecting older
+absent rows mean generation zero for rollout compatibility. Recovery and
+authenticated password change increment the generation and blacklist outstanding
+refresh tokens, rejecting older
 long-lived sessions, including refreshes rotated around reset. Already-issued
 access tokens remain stateless for only their existing ten-minute maximum.
 
 Recovery targets only an address matching both `User.email` and verified
 `EmailVerification.normalized_email`. Email change invalidates recovery state;
 the password-hash-bound digest also invalidates a link after any external
-password change. Direct/admin password changes do not yet increment session
-generation; that broader revocation belongs to a later account-security slice.
+password change. The authenticated password-change operation requires the
+current password and atomically updates the password, recovery state, session
+generation, and outstanding refresh-token blacklist state. Direct admin-side
+password edits remain outside this API workflow.
 
 ## Access Token
 

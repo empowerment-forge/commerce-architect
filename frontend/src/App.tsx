@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import {
+  changePassword,
   changeEmail,
   getCurrentUser,
   loginAccount,
@@ -9,6 +10,7 @@ import {
   refreshAccessToken,
   registerAccount,
   resendVerificationAuthenticated,
+  updatePersonalInformation,
 } from "./api/auth";
 import type { AuthUser } from "./api/auth";
 import { ApiError, createAuthenticatedRequester, SessionExpiredError, SESSION_EXPIRED_MESSAGE } from "./api/client";
@@ -38,10 +40,10 @@ type AuthPanelProps = {
   onLogin: (access: string) => Promise<void>;
 };
 
-type RegistrationField = "username" | "email" | "password";
+type RegistrationField = "username" | "first_name" | "last_name" | "phone" | "email" | "password";
 type RegistrationFieldErrors = Partial<Record<RegistrationField, string[]>>;
 
-const registrationFields: RegistrationField[] = ["username", "email", "password"];
+const registrationFields: RegistrationField[] = ["username", "first_name", "last_name", "phone", "email", "password"];
 
 function registrationErrors(error: ApiError): RegistrationFieldErrors {
   return Object.fromEntries(
@@ -97,6 +99,9 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
       if (mode === "register") {
         const result = await registerAccount(
           String(data.get("username")),
+          String(data.get("first_name")),
+          String(data.get("last_name")),
+          String(data.get("phone")),
           String(data.get("email")),
           String(data.get("password")),
         );
@@ -161,16 +166,33 @@ function AuthPanel({ onClose, onLogin }: AuthPanelProps) {
       <h2 className="mt-5 text-xl font-semibold">{mode === "login" ? "Welcome back" : "Create account"}</h2>
       <form className="mt-4 space-y-4" onSubmit={submit}>
         <div>
-          <label className="block text-sm font-medium" htmlFor="auth-username">Username</label>
+          <label className="block text-sm font-medium" htmlFor="auth-username">{mode === "login" ? "Username or Email" : "Username"}</label>
           <input aria-describedby={fieldErrors.username ? "username-errors" : undefined} aria-invalid={Boolean(fieldErrors.username)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-username" name="username" required />
           {mode === "register" && <FieldErrors errors={fieldErrors.username} field="username" />}
         </div>
         {mode === "register" && (
-          <div>
-            <label className="block text-sm font-medium" htmlFor="auth-email">Email</label>
-            <input aria-describedby={fieldErrors.email ? "email-errors" : undefined} aria-invalid={Boolean(fieldErrors.email)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-email" name="email" required type="email" />
-            <FieldErrors errors={fieldErrors.email} field="email" />
-          </div>
+          <>
+            <div>
+              <label className="block text-sm font-medium" htmlFor="auth-first-name">First name *</label>
+              <input aria-describedby={fieldErrors.first_name ? "first_name-errors" : undefined} aria-invalid={Boolean(fieldErrors.first_name)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-first-name" name="first_name" required />
+              <FieldErrors errors={fieldErrors.first_name} field="first_name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium" htmlFor="auth-last-name">Last name *</label>
+              <input aria-describedby={fieldErrors.last_name ? "last_name-errors" : undefined} aria-invalid={Boolean(fieldErrors.last_name)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-last-name" name="last_name" required />
+              <FieldErrors errors={fieldErrors.last_name} field="last_name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium" htmlFor="auth-phone">Phone <span className="font-normal text-slate-500">(optional)</span></label>
+              <input aria-describedby={fieldErrors.phone ? "phone-errors" : undefined} aria-invalid={Boolean(fieldErrors.phone)} autoComplete="tel" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-phone" inputMode="tel" name="phone" />
+              <FieldErrors errors={fieldErrors.phone} field="phone" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium" htmlFor="auth-email">Email</label>
+              <input aria-describedby={fieldErrors.email ? "email-errors" : undefined} aria-invalid={Boolean(fieldErrors.email)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" id="auth-email" name="email" required type="email" />
+              <FieldErrors errors={fieldErrors.email} field="email" />
+            </div>
+          </>
         )}
         <div>
           <label className="block text-sm font-medium" htmlFor="auth-password">Password</label>
@@ -229,23 +251,31 @@ type AccountPanelProps = {
   request: AuthenticatedRequester;
   user: AuthUser;
   onUserChange: (user: AuthUser) => void;
+  onPasswordChanged: (message: string) => void;
   onLogout: () => void;
   onClose: () => void;
 };
 
-function AccountPanel({ request, user, onUserChange, onLogout, onClose }: AccountPanelProps) {
+function AccountPanel({ request, user, onUserChange, onPasswordChanged, onLogout, onClose }: AccountPanelProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
   const [resendBusy, setResendBusy] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
 
   function clearFeedback() {
-    setMessage(null);
-    setError(null);
+    setProfileMessage(null);
+    setProfileError(null);
+    setEmailMessage(null);
+    setEmailError(null);
+    setPasswordError(null);
     setResendMessage(null);
     setResendError(null);
   }
@@ -268,25 +298,51 @@ function AccountPanel({ request, user, onUserChange, onLogout, onClose }: Accoun
 
   function closeSettings() {
     clearFeedback();
-    setChangeEmailOpen(false);
     setSettingsOpen(false);
+  }
+
+  async function submitProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProfileBusy(true);
+    setProfileMessage(null);
+    setProfileError(null);
+    const data = new FormData(event.currentTarget);
+    try {
+      const result = await updatePersonalInformation(
+        request,
+        String(data.get("first_name")),
+        String(data.get("last_name")),
+        String(data.get("phone")),
+      );
+      onUserChange({
+        ...user,
+        first_name: result.first_name,
+        last_name: result.last_name,
+        phone: result.phone,
+      });
+      setProfileMessage(result.detail);
+    } catch (requestError) {
+      setProfileError(errorMessage(requestError, "Unable to update personal information. Please try again."));
+    } finally {
+      setProfileBusy(false);
+    }
   }
 
   async function submitEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     setEmailBusy(true);
-    clearFeedback();
+    setEmailMessage(null);
+    setEmailError(null);
     const email = String(new FormData(form).get("email"));
     try {
       const result = await changeEmail(request, email);
       onUserChange({ ...user, email: result.email, email_verified: false, email_verified_at: null });
-      setError(null);
-      setMessage(result.detail);
-      setChangeEmailOpen(false);
+      setEmailError(null);
+      setEmailMessage(result.detail);
       form.reset();
     } catch (requestError) {
-      setMessage(null);
+      setEmailMessage(null);
       if (
         requestError instanceof ApiError
         && requestError.body.code === "verification_delivery_failed"
@@ -299,9 +355,31 @@ function AccountPanel({ request, user, onUserChange, onLogout, onClose }: Accoun
           email_verified_at: null,
         });
       }
-      setError(errorMessage(requestError, "Unable to change email. Please try again."));
+      setEmailError(errorMessage(requestError, "Unable to change email. Please try again."));
     } finally {
       setEmailBusy(false);
+    }
+  }
+
+  async function submitPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    setPasswordBusy(true);
+    setPasswordError(null);
+    const data = new FormData(form);
+    try {
+      const result = await changePassword(
+        request,
+        String(data.get("current_password")),
+        String(data.get("new_password")),
+        String(data.get("new_password_confirmation")),
+      );
+      form.reset();
+      onPasswordChanged(result.detail);
+    } catch (requestError) {
+      setPasswordError(errorMessage(requestError, "Unable to change password. Please try again."));
+    } finally {
+      setPasswordBusy(false);
     }
   }
 
@@ -311,34 +389,50 @@ function AccountPanel({ request, user, onUserChange, onLogout, onClose }: Accoun
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold">Update account</h2>
-            <p className="mt-2"><span className="font-medium">Current email:</span> {user.email}</p>
           </div>
           <div aria-label="Update account actions" className="flex flex-wrap gap-3" role="group">
-            <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium disabled:opacity-60" disabled={emailBusy} onClick={closeSettings} type="button">Back to account</button>
+            <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium disabled:opacity-60" disabled={profileBusy || emailBusy || passwordBusy} onClick={closeSettings} type="button">Back to account</button>
           </div>
         </div>
-        {!changeEmailOpen ? (
-          <button
-            className="mt-6 rounded-md bg-blue-700 px-4 py-2 font-medium text-white"
-            onClick={() => { clearFeedback(); setChangeEmailOpen(true); }}
-            type="button"
-          >
-            Change email
-          </button>
-        ) : (
-          <form className="mt-6 border-t border-slate-200 pt-5" onSubmit={submitEmail}>
-            <label className="block text-sm font-medium">
-              New email
-              <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" name="email" required type="email" />
-            </label>
-            <div aria-label="Change email actions" className="mt-3 flex flex-wrap gap-3" role="group">
-              <button className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={emailBusy} type="submit">{emailBusy ? "Changing…" : "Send verification to new email"}</button>
-              <button className="rounded-md border border-slate-300 px-4 py-2 font-medium disabled:opacity-60" disabled={emailBusy} onClick={() => { clearFeedback(); setChangeEmailOpen(false); }} type="button">Cancel</button>
-            </div>
-          </form>
-        )}
-        {message && <p className="mt-4 text-sm text-emerald-700" role="status">{message}</p>}
-        {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
+        <form className="mt-6 space-y-4" onSubmit={submitProfile}>
+          <h3 className="text-lg font-semibold">Personal information</h3>
+          <label className="block min-w-0 text-sm font-medium">First name
+            <input className="mt-1 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2" defaultValue={user.first_name} name="first_name" required />
+          </label>
+          <label className="block min-w-0 text-sm font-medium">Last name
+            <input className="mt-1 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2" defaultValue={user.last_name} name="last_name" required />
+          </label>
+          <label className="block min-w-0 text-sm font-medium">Phone <span className="font-normal text-slate-500">(required for SMS messages)</span>
+            <input autoComplete="tel" className="mt-1 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2" defaultValue={user.phone} inputMode="tel" name="phone" />
+          </label>
+          <button className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={profileBusy} type="submit">{profileBusy ? "Updating…" : "Update information"}</button>
+          {profileMessage && <p className="text-sm text-emerald-700" role="status">{profileMessage}</p>}
+          {profileError && <p className="text-sm text-red-700" role="alert">{profileError}</p>}
+        </form>
+        <form className="mt-6 space-y-4 border-t border-slate-200 pt-6" onSubmit={submitEmail}>
+          <h3 className="text-lg font-semibold">Email</h3>
+          <p><span className="font-medium">Current email:</span> {user.email}</p>
+          <label className="block min-w-0 text-sm font-medium">New email
+            <input className="mt-1 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2" name="email" required type="email" />
+          </label>
+          <button className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={emailBusy} type="submit">{emailBusy ? "Changing…" : "Send verification to new email"}</button>
+          {emailMessage && <p className="text-sm text-emerald-700" role="status">{emailMessage}</p>}
+          {emailError && <p className="text-sm text-red-700" role="alert">{emailError}</p>}
+        </form>
+        <form className="mt-6 space-y-4 border-t border-slate-200 pt-6" onSubmit={submitPassword}>
+          <h3 className="text-lg font-semibold">Password</h3>
+          <label className="block min-w-0 text-sm font-medium">Current password
+            <input autoComplete="current-password" className="mt-1 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2" name="current_password" required type="password" />
+          </label>
+          <label className="block min-w-0 text-sm font-medium">New password
+            <input autoComplete="new-password" className="mt-1 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2" name="new_password" required type="password" />
+          </label>
+          <label className="block min-w-0 text-sm font-medium">Confirm new password
+            <input autoComplete="new-password" className="mt-1 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2" name="new_password_confirmation" required type="password" />
+          </label>
+          <button className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={passwordBusy} type="submit">{passwordBusy ? "Changing…" : "Change password"}</button>
+          {passwordError && <p className="text-sm text-red-700" role="alert">{passwordError}</p>}
+        </form>
       </section>
     );
   }
@@ -349,6 +443,8 @@ function AccountPanel({ request, user, onUserChange, onLogout, onClose }: Accoun
         <div>
           <h2 className="text-xl font-semibold">Account</h2>
           <p className="mt-2"><span className="font-medium">Username:</span> {user.username}</p>
+          <p><span className="font-medium">Name:</span> {[user.first_name, user.last_name].filter(Boolean).join(" ") || "Not set"}</p>
+          <p><span className="font-medium">Phone:</span> {user.phone || "Not set"}</p>
           <p><span className="font-medium">Email:</span> {user.email}</p>
           <p>
             <span className="font-medium">Account status:</span>{" "}
@@ -380,6 +476,7 @@ function App() {
     window.location.pathname === "/login" ? "auth" : null,
   );
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
+  const [sessionMessageSuccess, setSessionMessageSuccess] = useState(false);
   const accessTokenRef = useRef<string | null>(null);
   const refreshStarted = useRef(false);
 
@@ -400,6 +497,7 @@ function App() {
         setUser(null);
         setVisiblePanel("auth");
         setSessionMessage(SESSION_EXPIRED_MESSAGE);
+        setSessionMessageSuccess(false);
       },
     }),
   );
@@ -429,6 +527,7 @@ function App() {
           setUser(null);
           setVisiblePanel("auth");
           setSessionMessage(null);
+          setSessionMessageSuccess(false);
         }}
       />
     );
@@ -444,6 +543,7 @@ function App() {
       setUser(null);
       setVisiblePanel(null);
       setSessionMessage(null);
+      setSessionMessageSuccess(false);
     }
   }
 
@@ -466,9 +566,29 @@ function App() {
       </header>
       {!restoring && visiblePanel !== null && (
         <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
-          {sessionMessage && <p className="mb-4 text-sm text-red-700" role="alert">{sessionMessage}</p>}
+          {sessionMessage && (
+            <p
+              className={`mb-4 text-sm ${sessionMessageSuccess ? "text-emerald-700" : "text-red-700"}`}
+              role={sessionMessageSuccess ? "status" : "alert"}
+            >
+              {sessionMessage}
+            </p>
+          )}
           {visiblePanel === "account" && user && accessToken && (
-            <AccountPanel request={authenticatedRequest} onClose={() => setVisiblePanel(null)} onLogout={logout} onUserChange={setUser} user={user} />
+            <AccountPanel
+              request={authenticatedRequest}
+              onClose={() => setVisiblePanel(null)}
+              onLogout={logout}
+              onPasswordChanged={(message) => {
+                storeAccessToken(null);
+                setUser(null);
+                setVisiblePanel("auth");
+                setSessionMessage(message);
+                setSessionMessageSuccess(true);
+              }}
+              onUserChange={setUser}
+              user={user}
+            />
           )}
           {visiblePanel === "auth" && !user && !accessToken && (
             <AuthPanel
@@ -478,6 +598,7 @@ function App() {
                 const currentUser = await getCurrentUser(authenticatedRequest);
                 setUser(currentUser);
                 setSessionMessage(null);
+                setSessionMessageSuccess(false);
                 setVisiblePanel(null);
               }}
             />
