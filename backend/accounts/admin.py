@@ -2,7 +2,12 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 
-from .models import AccountSecurityState, EmailVerification, PasswordRecoveryState
+from .models import (
+    AccountProfile,
+    AccountSecurityState,
+    EmailVerification,
+    PasswordRecoveryState,
+)
 
 
 admin.site.unregister(User)
@@ -47,6 +52,13 @@ class AccountSecurityStateAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(AccountProfile)
+class AccountProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "phone", "updated_at")
+    search_fields = ("user__username", "user__email", "phone")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(PasswordRecoveryState)

@@ -10,6 +10,9 @@ function response(body: unknown, ok = true, status = 200): Response {
 const verifiedUser = {
   id: 1,
   username: "alice",
+  first_name: "Alice",
+  last_name: "Architect",
+  phone: "+1 317 555 0123",
   email: "alice@example.com",
   email_verified: true,
   email_verified_at: "2026-08-13T12:00:00Z",
@@ -28,6 +31,8 @@ async function openAndFillRegistration() {
   await screen.findByRole("heading", { name: "Welcome back" });
   await user.click(screen.getByRole("button", { name: "Show register form" }));
   await user.type(screen.getByLabelText("Username"), "alice");
+  await user.type(screen.getByLabelText("First name *"), "Alice");
+  await user.type(screen.getByLabelText("Last name *"), "Architect");
   await user.type(screen.getByLabelText("Email"), "alice@example.com");
   await user.type(screen.getByLabelText("Password"), "SecurePass123!");
   return user;
@@ -58,7 +63,7 @@ describe("App authentication flow", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Username")).toBeInTheDocument();
+    expect(screen.getByLabelText("Username or Email")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show login form" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Show register form" })).toHaveAttribute("aria-pressed", "false");
@@ -106,7 +111,7 @@ describe("App authentication flow", () => {
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "Login | Register" }));
-    await user.type(screen.getByLabelText("Username"), "alice");
+    await user.type(screen.getByLabelText("Username or Email"), "alice");
     await user.type(screen.getByLabelText("Password"), "wrong-password");
     await user.click(screen.getByRole("button", { name: "Login" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("No active account found");
@@ -137,11 +142,26 @@ describe("App authentication flow", () => {
 
     await user.click(screen.getByRole("button", { name: "Show register form" }));
     await user.type(screen.getByLabelText("Username"), "alice");
+    await user.type(screen.getByLabelText("First name *"), "Alice");
+    await user.type(screen.getByLabelText("Last name *"), "Architect");
     await user.type(screen.getByLabelText("Email"), "alice@example.com");
     await user.type(screen.getByLabelText("Password"), "SecurePass123!");
     await user.click(screen.getByRole("button", { name: "Register" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/register/",
+      expect.objectContaining({
+        body: JSON.stringify({
+          username: "alice",
+          first_name: "Alice",
+          last_name: "Architect",
+          phone: "",
+          email: "alice@example.com",
+          password: "SecurePass123!",
+        }),
+      }),
+    );
     expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Didn't receive the email? Resend verification" }));
     expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
@@ -278,7 +298,7 @@ describe("App authentication flow", () => {
     await user.click(await screen.findByRole("button", { name: "Login | Register" }));
     await screen.findByRole("heading", { name: "Welcome back" });
 
-    await user.type(screen.getByLabelText("Username"), "alice");
+    await user.type(screen.getByLabelText("Username or Email"), "alice");
     await user.type(screen.getByLabelText("Password"), "SecurePass123!");
     await user.click(screen.getByRole("button", { name: "Login" }));
 
@@ -297,7 +317,7 @@ describe("App authentication flow", () => {
     await user.click(await screen.findByRole("button", { name: "Login | Register" }));
     await screen.findByRole("heading", { name: "Welcome back" });
 
-    await user.type(screen.getByLabelText("Username"), "alice");
+    await user.type(screen.getByLabelText("Username or Email"), "alice");
     await user.type(screen.getByLabelText("Password"), "wrong-password");
     await user.click(screen.getByRole("button", { name: "Login" }));
 
@@ -322,7 +342,7 @@ describe("App authentication flow", () => {
     await user.click(await screen.findByRole("button", { name: "Login | Register" }));
     await screen.findByRole("heading", { name: "Welcome back" });
 
-    await user.type(screen.getByLabelText("Username"), "alice");
+    await user.type(screen.getByLabelText("Username or Email"), "alice");
     await user.type(screen.getByLabelText("Password"), "SecurePass123!");
     await user.click(screen.getByRole("button", { name: "Login" }));
     expect(await screen.findByRole("button", { name: "alice" })).toBeInTheDocument();
@@ -345,7 +365,6 @@ describe("App authentication flow", () => {
     await user.click(screen.getByRole("button", { name: "Update account" }));
     expect(screen.getByRole("heading", { name: "Update account" })).toBeInTheDocument();
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Change email" }));
     await user.type(screen.getByLabelText("New email"), "new@example.com");
     await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
     expect(await screen.findByText("new@example.com")).toBeInTheDocument();
@@ -396,11 +415,9 @@ describe("App authentication flow", () => {
     const backButton = within(updateActions).getByRole("button", { name: "Back to account" });
     expect(backButton).toBeEnabled();
 
-    await user.click(screen.getByRole("button", { name: "Change email" }));
-    const changeEmailActions = screen.getByRole("group", { name: "Change email actions" });
-    expect(changeEmailActions).toHaveClass("flex", "flex-wrap", "gap-3");
-    expect(within(changeEmailActions).getByRole("button", { name: "Send verification to new email" })).toBeInTheDocument();
-    expect(within(changeEmailActions).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send verification to new email" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change email" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
 
     await user.click(backButton);
     expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();
@@ -444,7 +461,6 @@ describe("App authentication flow", () => {
 
     await user.click(await screen.findByRole("button", { name: "alice" }));
     await user.click(screen.getByRole("button", { name: "Update account" }));
-    await user.click(screen.getByRole("button", { name: "Change email" }));
     await user.type(screen.getByLabelText("New email"), "new@example.com");
     await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
 
@@ -479,7 +495,6 @@ describe("App authentication flow", () => {
 
     await user.click(await screen.findByRole("button", { name: "alice" }));
     await user.click(screen.getByRole("button", { name: "Update account" }));
-    await user.click(screen.getByRole("button", { name: "Change email" }));
     await user.type(screen.getByLabelText("New email"), "new@example.com");
     await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
 
@@ -566,7 +581,6 @@ describe("App authentication flow", () => {
     expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Update account" }));
-    await user.click(screen.getByRole("button", { name: "Change email" }));
     await user.type(screen.getByLabelText("New email"), "new@example.com");
     await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
 
@@ -597,7 +611,6 @@ describe("App authentication flow", () => {
     await user.click(await screen.findByRole("button", { name: "alice" }));
     expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Update account" }));
-    await user.click(screen.getByRole("button", { name: "Change email" }));
 
     await user.type(screen.getByLabelText("New email"), "taken@example.com");
     await user.click(screen.getByRole("button", { name: "Send verification to new email" }));
@@ -610,5 +623,129 @@ describe("App authentication flow", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Email changed");
     expect(screen.queryByText("A user with that email already exists.")).not.toBeInTheDocument();
     expect(screen.getByText("corrected@example.com")).toBeInTheDocument();
+  });
+
+  it("shows complete identity and all three independent update forms immediately", async () => {
+    mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response(verifiedUser),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    const identity = screen.getByRole("heading", { name: "Account" }).parentElement;
+    expect(identity).toHaveTextContent("Username: alice");
+    expect(identity).toHaveTextContent("Name: Alice Architect");
+    expect(identity).toHaveTextContent("Phone: +1 317 555 0123");
+    expect(identity).toHaveTextContent("Email: alice@example.com");
+
+    await user.click(screen.getByRole("button", { name: "Update account" }));
+    expect(screen.getByRole("heading", { name: "Personal information" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Email" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Password" })).toBeInTheDocument();
+    expect(screen.getByLabelText("First name")).toHaveValue("Alice");
+    expect(screen.getByLabelText("Last name")).toHaveValue("Architect");
+    expect(screen.getByLabelText(/Phone/)).toHaveValue("+1 317 555 0123");
+    expect(screen.getByText("(required for SMS messages)")).toBeInTheDocument();
+    for (const label of ["Current password", "New password", "Confirm new password"]) {
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute("type", "password");
+      expect(input).toHaveValue("");
+    }
+    expect(screen.queryByRole("button", { name: "Change email" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("updates personal information independently and reflects it in Account", async () => {
+    const fetchMock = mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response(verifiedUser),
+    });
+    fetchMock.mockImplementation(async (input, options) => {
+      if (String(input) === "/api/auth/refresh/") return response({ access: "restored-token" });
+      if (String(input) === "/api/auth/me/" && options?.method === "PATCH") {
+        return response({
+          first_name: "Alicia",
+          last_name: "Builder",
+          phone: "+1 317 555 0199",
+          detail: "Personal information updated.",
+        });
+      }
+      if (String(input) === "/api/auth/me/") return response(verifiedUser);
+      return response([]);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    await user.click(screen.getByRole("button", { name: "Update account" }));
+
+    await user.clear(screen.getByLabelText("First name"));
+    await user.type(screen.getByLabelText("First name"), "Alicia");
+    await user.clear(screen.getByLabelText("Last name"));
+    await user.type(screen.getByLabelText("Last name"), "Builder");
+    await user.clear(screen.getByLabelText(/Phone/));
+    await user.type(screen.getByLabelText(/Phone/), "+1 317 555 0199");
+    await user.click(screen.getByRole("button", { name: "Update information" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Personal information updated");
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/auth/change-email/")).toHaveLength(0);
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/auth/password-change/")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Back to account" }));
+    expect(screen.getByText("Alicia Builder")).toBeInTheDocument();
+    expect(screen.getByText("+1 317 555 0199")).toBeInTheDocument();
+  });
+
+  it("keeps password failures authenticated and logs out with success feedback after change", async () => {
+    let attempts = 0;
+    mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response(verifiedUser),
+      "/api/auth/password-change/": () => {
+        attempts += 1;
+        return attempts === 1
+          ? response({ current_password: ["Current password is incorrect."] }, false, 400)
+          : response({
+              code: "password_changed",
+              detail: "Password changed successfully. Please sign in again.",
+            });
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    await user.click(screen.getByRole("button", { name: "Update account" }));
+
+    await user.type(screen.getByLabelText("Current password"), "wrong-password");
+    await user.type(screen.getByLabelText("New password"), "OtherSecure456!");
+    await user.type(screen.getByLabelText("Confirm new password"), "OtherSecure456!");
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Current password is incorrect");
+    expect(screen.getByRole("button", { name: "alice" })).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Current password"));
+    await user.type(screen.getByLabelText("Current password"), "SecurePass123!");
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Password changed successfully");
+    expect(screen.queryByRole("button", { name: "alice" })).not.toBeInTheDocument();
+  });
+
+  it("renders legacy blank identity values without undefined or spacing artifacts", async () => {
+    mockApi({
+      "/api/auth/refresh/": () => response({ access: "restored-token" }),
+      "/api/auth/me/": () => response({
+        ...verifiedUser,
+        first_name: "Legacy",
+        last_name: "",
+        phone: "",
+      }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "alice" }));
+    expect(screen.getByText("Legacy")).toBeInTheDocument();
+    expect(screen.getByText("Not set")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("undefined");
   });
 });

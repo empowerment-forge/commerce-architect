@@ -23,6 +23,30 @@ def normalize_email(value):
     return value.strip().casefold()
 
 
+def resolve_login_user(identifier):
+    candidate = (identifier or "").strip()
+    if not candidate:
+        return None
+
+    username_user = User.objects.filter(username=candidate).first()
+    normalized = normalize_email(candidate)
+    verification = (
+        EmailVerification.objects.select_related("user")
+        .filter(normalized_email=normalized)
+        .first()
+    )
+    email_user = None
+    if verification and normalize_email(verification.user.email) == normalized:
+        email_user = verification.user
+
+    matched_ids = {
+        user.pk for user in (username_user, email_user) if user is not None
+    }
+    if len(matched_ids) != 1:
+        return None
+    return username_user or email_user
+
+
 def token_digest(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -51,6 +75,10 @@ class IssuedPasswordRecovery:
 class PasswordRecoveryRequestResult:
     status: str
     issued: IssuedPasswordRecovery | None = None
+
+
+class InvalidCurrentPassword(Exception):
+    pass
 
 
 def issue_verification(verification):
@@ -288,12 +316,38 @@ def consume_password_recovery(uid, token, new_password):
     security.session_generation += 1
     security.save(update_fields=["session_generation", "updated_at"])
 
+    blacklist_refresh_sessions(user)
+    return True
+
+
+def blacklist_refresh_sessions(user):
     outstanding = OutstandingToken.objects.filter(user=user).only("id")
     BlacklistedToken.objects.bulk_create(
         [BlacklistedToken(token=item) for item in outstanding],
         ignore_conflicts=True,
     )
-    return True
+
+
+@transaction.atomic
+def change_password_and_revoke_sessions(user_id, current_password, new_password):
+    user = User.objects.select_for_update().get(pk=user_id)
+    if not user.check_password(current_password):
+        raise InvalidCurrentPassword
+    security, _ = AccountSecurityState.objects.select_for_update().get_or_create(
+        user=user
+    )
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    security.session_generation += 1
+    security.save(update_fields=["session_generation", "updated_at"])
+    PasswordRecoveryState.objects.filter(user=user).update(
+        token_digest="",
+        token_created_at=None,
+        consumed_at=None,
+        updated_at=timezone.now(),
+    )
+    blacklist_refresh_sessions(user)
+    return user
 
 
 def is_verified(user):

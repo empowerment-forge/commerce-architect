@@ -24,6 +24,8 @@ from catalog.models import Product
 def registration_payload(**overrides):
     payload = {
         "username": "newuser",
+        "first_name": "New",
+        "last_name": "User",
         "email": "NewUser@Example.COM",
         "password": "SecurePass123!",
     }
@@ -65,11 +67,7 @@ def recovery_params(message=None):
 def test_registration_success(client):
     response = client.post(
         "/api/auth/register/",
-        {
-            "username": "newuser",
-            "email": "newuser@example.com",
-            "password": "SecurePass123!",
-        },
+        registration_payload(email="newuser@example.com"),
         content_type="application/json",
     )
 
@@ -137,11 +135,7 @@ def test_registration_failure_duplicate_user(client):
 
     response = client.post(
         "/api/auth/register/",
-        {
-            "username": "newuser",
-            "email": "duplicate@example.com",
-            "password": "SecurePass123!",
-        },
+        registration_payload(email="duplicate@example.com"),
         content_type="application/json",
     )
 
