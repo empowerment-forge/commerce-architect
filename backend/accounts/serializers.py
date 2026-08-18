@@ -61,12 +61,22 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError("A user with that username already exists.")
+        if EmailVerification.objects.filter(
+            normalized_email=normalize_email(value)
+        ).exists():
+            raise serializers.ValidationError(
+                "This username conflicts with an existing account identity."
+            )
         return value
 
     def validate_email(self, value):
         normalized = normalize_email(value)
         if EmailVerification.objects.filter(normalized_email=normalized).exists():
             raise serializers.ValidationError("A user with that email already exists.")
+        if User.objects.filter(username__iexact=normalized).exists():
+            raise serializers.ValidationError(
+                "This email conflicts with an existing account identity."
+            )
         return normalized
 
     def validate(self, attrs):
@@ -159,6 +169,10 @@ class ChangeEmailSerializer(serializers.Serializer):
             raise serializers.ValidationError("A user with that email already exists.")
         if normalize_email(user.email) == normalized:
             raise serializers.ValidationError("Enter a different email address.")
+        if User.objects.exclude(pk=user.pk).filter(username__iexact=normalized).exists():
+            raise serializers.ValidationError(
+                "This email conflicts with an existing account identity."
+            )
         return normalized
 
 

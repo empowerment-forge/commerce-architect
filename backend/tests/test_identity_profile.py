@@ -153,6 +153,60 @@ def test_login_rejects_username_email_identity_ambiguity(client):
 
 
 @pytest.mark.django_db
+def test_registration_prevents_cross_account_username_email_collisions(client):
+    verified_user(username="existing-user", email="identity@example.com")
+    username_collision = client.post(
+        "/api/auth/register/",
+        registration_payload(
+            username="IDENTITY@example.com",
+            email="other@example.com",
+        ),
+        content_type="application/json",
+    )
+    assert username_collision.status_code == 400
+    assert "identity" in username_collision.json()["username"][0].lower()
+
+    User.objects.create_user(
+        username="reserved@example.com",
+        email="reserved-owner@example.com",
+        password=PASSWORD,
+    )
+    email_collision = client.post(
+        "/api/auth/register/",
+        registration_payload(
+            username="new-user",
+            email="RESERVED@example.com",
+        ),
+        content_type="application/json",
+    )
+    assert email_collision.status_code == 400
+    assert "identity" in email_collision.json()["email"][0].lower()
+
+
+@pytest.mark.django_db
+def test_email_change_prevents_cross_account_username_collision(client):
+    user = verified_user(username="profile-owner", email="profile@example.com")
+    User.objects.create_user(
+        username="reserved@example.com",
+        email="reserved-owner@example.com",
+        password=PASSWORD,
+    )
+    access = login(client, user.username).json()["access"]
+
+    response = client.post(
+        "/api/auth/change-email/",
+        {"email": "RESERVED@example.com"},
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+    )
+
+    assert response.status_code == 400
+    assert "identity" in response.json()["email"][0].lower()
+    user.refresh_from_db()
+    assert user.email == "profile@example.com"
+
+
+@pytest.mark.django_db
 def test_me_returns_complete_identity_and_empty_phone_consistently(client):
     user = verified_user(first_name="Legacy", last_name="")
     access = login(client).json()["access"]
