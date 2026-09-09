@@ -64,7 +64,7 @@ PostgreSQL.
 5.  Apply the checked-in Django migrations:
 
     ```bash
-    podman-compose exec web python manage.py migrate
+    podman exec -it commerce_web python manage.py migrate
     ```
 
     or:
@@ -74,12 +74,15 @@ PostgreSQL.
     ```
 
 6.  Verify the services and open the application using the URLs below. Then see
-    [DOCKER_SETUP.md](DOCKER_SETUP.md) for daily Compose operations and
+    [DOCKER_SETUP.md](DOCKER_SETUP.md) for the Podman execution convention and
+    daily Compose operations, and
     [UI_SETUP.md](UI_SETUP.md) for frontend behavior and optional native Vite
     development.
 
 The repository's Compose file supports both documented local runtimes. GitHub
-Actions CI uses Docker Compose.
+Actions builds and validates the production images directly and uses disposable
+PostgreSQL for backend integration tests. See
+[BUILD_DEPLOY.md](BUILD_DEPLOY.md) for the CI and hosted deployment contract.
 
 The checked-in Compose file is for local development, not production. A
 production deployment must set `COMMERCE_ENV=production` and provide its own
@@ -115,7 +118,8 @@ documented as current commands yet.
     the frontend container. The exact commands are in the developer command
     quick reference in [DOCKER_SETUP.md](DOCKER_SETUP.md).
 5.  Make focused changes on the appropriate feature branch, follow the repository
-    pull-request workflow, and keep CI green.
+    pull-request workflow, keep CI green, and report validation according to
+    [VALIDATION_STANDARDS.md](VALIDATION_STANDARDS.md).
 
 ## Architectural Philosophy
 

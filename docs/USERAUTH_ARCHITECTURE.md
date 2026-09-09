@@ -30,20 +30,104 @@ Connect in a later phase.
 
 All current authentication routes are mounted under `/api/auth/`:
 
--   `POST /api/auth/register/` creates a user and returns the new user's ID,
-    username, and email. It does not issue tokens.
+-   `POST /api/auth/register/` creates a user with required first and last names,
+    an optional account-profile phone number, and a unique normalized email. It
+    validates the password, sends a verification email, and does not issue tokens.
+-   `POST /api/auth/verify-email/` consumes an expiring, single-use token and
+    verifies the exact normalized address to which it was issued.
+-   `POST /api/auth/resend-verification/` returns an enumeration-resistant
+    response for known, unknown, verified, and cooldown-limited addresses and,
+    when eligible, rotates the token for the current address.
+-   `POST /api/auth/resend-verification-authenticated/` derives the address
+    from the authenticated user, applies the same cooldown and token rotation,
+    and explicitly reports sent, cooldown, verified, or delivery-failure states.
+-   `POST /api/auth/change-email/` requires JWT authentication, changes the
+    current address, invalidates prior verification/tokens, and sends a new link.
+-   `POST /api/auth/password-reset/request/` returns the same 202 response for
+    every syntactically valid request and emails eligible verified accounts.
+-   `POST /api/auth/password-reset/confirm/` validates a one-time recovery token
+    and Django password policy, changes the password, revokes long-lived
+    sessions, and requires a normal login afterward.
 -   `POST /api/auth/token/` validates credentials, returns an access token in
-    JSON, and sets the refresh token cookie.
+    JSON, and sets the refresh token cookie. Its backward-compatible `username`
+    request field accepts either the username or normalized email identity.
 -   `POST /api/auth/refresh/` reads the refresh token from its cookie, returns a
     new access token in JSON, and rotates the refresh token cookie when a new
     refresh token is issued.
 -   `POST /api/auth/logout/` blacklists a valid refresh token when present and
     clears the refresh token cookie.
 -   `GET /api/auth/me/` requires JWT authentication and returns the authenticated
-    user's ID, username, and email.
+    user's ID, username, first and last names, optional phone, current email, and
+    matching verification metadata.
+-   `PATCH /api/auth/me/` updates only the authenticated user's first name, last
+    name, and optional phone. Email and credential changes are separate operations.
+-   `POST /api/auth/password-change/` verifies the current password, enforces the
+    configured Django password policy, changes the password, and ends all refresh
+    sessions so the user must sign in again.
 
 There is no `/api/auth/login/` endpoint. Login and initial token issuance use
 `POST /api/auth/token/`.
+
+## Email Verification
+
+The stock Django `User` remains the account model. `accounts.EmailVerification`
+owns a one-to-one verification record with a unique normalized email,
+`verified_at`, token digest/timestamps, and resend state. Raw random tokens are
+sent by email but never stored. Tokens expire, are single-use, and are valid only
+while bound to both the record and current normalized `User.email`.
+
+Changing email atomically clears `verified_at`, replaces the token, and requires
+the new address to verify independently. Old-address links cannot verify the
+account, and resend targets only the current address. Existing JWT sessions are
+not automatically revoked by an address change; `/me` immediately reports the
+new address as unverified.
+
+`User.first_name` and `User.last_name` hold account names; no duplicate name
+columns or custom user model are introduced. `accounts.AccountProfile` is a
+small optional one-to-one extension that holds only the account phone number.
+Existing users may retain blank names and no profile row. New registration and
+profile updates require nonblank names, while a blank submitted phone preserves
+the currently stored value. This account profile is not a commerce Customer.
+
+`AUTH_REQUIRE_VERIFIED_EMAIL` controls credential-login enforcement. It defaults
+to false for migration compatibility, while local Compose enables it for the
+complete manual journey. When enabled, correct credentials for an unverified
+current address return 403 without issuing a refresh cookie.
+
+Local development defaults to the readable console email backend. For real-mail
+UAT and production, the same `send_mail()` path can use any standards-compatible
+SMTP provider through Django 6.1 `MAILERS` options supplied by environment
+variables. The application has no provider SDK dependency. Verification links
+open the frontend `/verify-email` page, which removes the raw query token from
+browser history and submits verification by POST.
+
+## Password Recovery and Account Security State
+
+`accounts.PasswordRecoveryState` owns only recovery lifecycle data: a public
+UUID, current normalized-email binding, random-token digest, issue/send times,
+consumption time, and timestamps. Raw tokens have at least 256 bits of entropy,
+are sent only by email, expire after 30 minutes by default, and are never
+persisted. Reissue replaces the digest; successful consumption is single-use
+and atomic. Failed delivery conditionally clears its issued digest and restores
+the prior cooldown, permitting an immediate retry without changing the public
+response.
+
+`accounts.AccountSecurityState` separately owns the account-wide
+`session_generation` counter. Login places the current generation on the token
+pair. Cookie refresh compares it with current database state; missing claims and
+absent rows mean generation zero for rollout compatibility. Recovery and
+authenticated password change increment the generation and blacklist outstanding
+refresh tokens, rejecting older
+long-lived sessions, including refreshes rotated around reset. Already-issued
+access tokens remain stateless for only their existing ten-minute maximum.
+
+Recovery targets only an address matching both `User.email` and verified
+`EmailVerification.normalized_email`. Email change invalidates recovery state;
+the password-hash-bound digest also invalidates a link after any external
+password change. The authenticated password-change operation requires the
+current password and atomically updates the password, recovery state, session
+generation, and outstanding refresh-token blacklist state. Direct admin-side
+password edits remain outside this API workflow.
 
 ## Access Token
 
@@ -76,8 +160,8 @@ the cookie's security and path rules.
 
 The current Vite development proxy makes browser `/api` requests same-origin,
 so no permissive CORS policy is required. `SameSite=Strict` is retained as a
-strong CSRF boundary for the refresh cookie. Production is expected to route
-the browser and API through an appropriate same-origin HTTPS boundary; a future
+strong CSRF boundary for the refresh cookie. Hosted development currently routes
+the browser and API through a same-origin HTTPS boundary; any future
 separate-origin or cross-site deployment requires explicit CORS and CSRF review
 rather than weakening the cookie by default.
 
@@ -119,13 +203,16 @@ Backend authentication tests run in the `web` container. With Docker Compose:
 docker compose exec -T web pytest
 ```
 
-With Podman Compose, the local equivalent is:
+With Podman, run the test command directly in the existing container:
 
 ```bash
-podman-compose exec -T web pytest
+podman exec -i commerce_web pytest
 ```
 
-GitHub Actions currently uses Docker Compose for CI.
+GitHub Actions runs these tests against the validated production backend image
+with disposable PostgreSQL. Compose remains the supported local orchestration
+workflow; [DOCKER_SETUP.md](DOCKER_SETUP.md) defines the safe execution
+convention.
 
 ## Deployment Topology and BFF Evolution
 

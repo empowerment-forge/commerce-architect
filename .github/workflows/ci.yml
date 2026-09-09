@@ -3,46 +3,193 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - develop
   pull_request:
     branches:
       - develop
   workflow_dispatch:
 
+env:
+  BACKEND_IMAGE: ghcr.io/empowerment-forge/commerce-architect-backend
+  FRONTEND_IMAGE: ghcr.io/empowerment-forge/commerce-architect-frontend
+
 jobs:
-  test:
+  frontend-image-validation:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
+      - name: Build frontend image once
+        run: docker build --tag "${FRONTEND_IMAGE}:${GITHUB_SHA}" frontend
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Run frontend tests
-        working-directory: frontend
-        run: npm run test -- --run
-
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build containers
-        run: docker compose build web
-
-      - name: Start services
-        run: docker compose up -d db web
-
-      - name: Wait for PostgreSQL
+      - name: Start controlled API target
         run: |
-          for attempt in {1..30}; do
-            if docker compose exec -T db pg_isready -U commerce -d commerce_db; then
+          docker network create commerce-frontend-ci
+          docker run --detach \
+            --name commerce-frontend-api \
+            --network commerce-frontend-ci \
+            --network-alias backend-smoke \
+            hashicorp/http-echo:1.0 \
+            -listen=:8081 \
+            -text=commerce-api-proxy-ok
+
+      - name: Validate exact frontend image
+        run: |
+          image="${FRONTEND_IMAGE}:${GITHUB_SHA}"
+          docker run --rm \
+            --network commerce-frontend-ci \
+            --env PORT=8080 \
+            --env BACKEND_HOST=backend-smoke \
+            --env BACKEND_PORT=8081 \
+            "${image}" nginx -t
+
+          docker run --detach \
+            --name commerce-frontend-app \
+            --network commerce-frontend-ci \
+            --publish 8080:8080 \
+            --env PORT=8080 \
+            --env BACKEND_HOST=backend-smoke \
+            --env BACKEND_PORT=8081 \
+            "${image}"
+
+          for _ in {1..30}; do
+            status=$(curl --silent --show-error \
+              --output /tmp/frontend-index.html \
+              --write-out '%{http_code}' \
+              --header 'X-Forwarded-Proto: https' \
+              http://127.0.0.1:8080/) || status=000
+            if [ "${status}" = "200" ]; then
+              break
+            fi
+            sleep 2
+          done
+          test "${status}" = "200"
+          grep --fixed-strings '<div id="root"></div>' /tmp/frontend-index.html
+
+          status=$(curl --silent --show-error \
+            --output /tmp/frontend-spa-route.html \
+            --write-out '%{http_code}' \
+            http://127.0.0.1:8080/client-side-route)
+          test "${status}" = "200"
+          grep --fixed-strings '<div id="root"></div>' \
+            /tmp/frontend-spa-route.html
+
+          for path in /.git/config /.env; do
+            status=$(curl --silent --show-error \
+              --output /tmp/frontend-sensitive-response \
+              --write-out '%{http_code}' \
+              "http://127.0.0.1:8080${path}")
+            test "${status}" = "404"
+            if grep --quiet --fixed-strings '<div id="root"></div>' \
+              /tmp/frontend-sensitive-response; then
+              echo "Sensitive path returned the React index: ${path}"
+              exit 1
+            fi
+          done
+
+          for prefix in api admin static; do
+            headers="/tmp/frontend-${prefix}-redirect-headers"
+            status=$(curl --silent --show-error \
+              --output /dev/null \
+              --dump-header "${headers}" \
+              --write-out '%{http_code}' \
+              --header 'Host: dev-commerce.empowerment-forge.com' \
+              --header 'X-Forwarded-Proto: https' \
+              "http://127.0.0.1:8080/${prefix}")
+            test "${status}" = "308"
+            location=$(awk 'tolower($1) == "location:" {
+              sub(/\r$/, "", $2); print $2
+            }' "${headers}")
+            test "${location}" = "/${prefix}/"
+            if [[ "${location}" == http://* \
+              || "${location}" == *:8080* \
+              || "${location}" == *backend-smoke* ]]; then
+              echo "Unsafe bare-prefix redirect: /${prefix}"
+              cat "${headers}"
+              exit 1
+            fi
+          done
+
+          curl --fail --silent --show-error \
+            --header 'Host: dev-commerce.empowerment-forge.com' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8080/api/ \
+            | grep --fixed-strings 'commerce-api-proxy-ok'
+
+          curl --fail --silent --show-error \
+            --header 'Host: dev-commerce.empowerment-forge.com' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8080/admin/ \
+            | grep --fixed-strings 'commerce-api-proxy-ok'
+
+          curl --fail --silent --show-error \
+            --header 'Host: dev-commerce.empowerment-forge.com' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8080/static/ \
+            | grep --fixed-strings 'commerce-api-proxy-ok'
+
+          curl --fail --silent --show-error \
+            --header 'Host: dev-commerce.empowerment-forge.com' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8080/static/admin/css/base.css \
+            | grep --fixed-strings 'commerce-api-proxy-ok'
+
+      - name: Scan exact frontend image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Export validated frontend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          docker save "${FRONTEND_IMAGE}:${GITHUB_SHA}" \
+            | gzip > frontend-image.tar.gz
+
+      - name: Upload validated frontend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-image-${{ github.sha }}
+          path: frontend-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  backend-image-validation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build backend image once
+        run: docker build --tag "${BACKEND_IMAGE}:${GITHUB_SHA}" backend
+
+      - name: Build frontend image for proxy integration
+        run: docker build --tag "${FRONTEND_IMAGE}:${GITHUB_SHA}" frontend
+
+      - name: Start CI PostgreSQL
+        run: |
+          docker network create commerce-backend-ci
+          docker run --detach \
+            --name commerce-backend-postgres \
+            --network commerce-backend-ci \
+            --env POSTGRES_DB=commerce_ci \
+            --env POSTGRES_USER=commerce_ci \
+            --env POSTGRES_PASSWORD=ci-only-password \
+            postgres:16-alpine
+          for _ in {1..30}; do
+            if docker exec commerce-backend-postgres \
+              pg_isready --username commerce_ci --dbname commerce_ci; then
               exit 0
             fi
             sleep 2
@@ -50,9 +197,491 @@ jobs:
           echo "PostgreSQL did not become ready within 60 seconds."
           exit 1
 
-      - name: Run pytest
-        run: docker compose exec -T web pytest
+      - name: Validate exact backend image
+        env:
+          CI_SECRET_KEY: ci-only-strong-secret-key-with-more-than-fifty-characters-123456789
+        run: |
+          image="${BACKEND_IMAGE}:${GITHUB_SHA}"
+          runtime_environment=(
+            --network commerce-backend-ci
+            --env COMMERCE_ENV=production
+            --env DJANGO_SECRET_KEY="${CI_SECRET_KEY}"
+            --env DJANGO_DEBUG=false
+            --env "DJANGO_ALLOWED_HOSTS=commerce.example,healthcheck.railway.app,localhost,testserver"
+            --env DJANGO_CSRF_TRUSTED_ORIGINS=https://localhost
+            --env DJANGO_TRUST_FORWARDED_PROTO=true
+            --env DJANGO_SECURE_SSL_REDIRECT=false
+            --env AUTH_FRONTEND_BASE_URL=https://commerce.example
+            --env EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+            --env "DEFAULT_FROM_EMAIL=Commerce Architect <noreply@commerce.example>"
+            --env SMTP_HOST=smtp.example.com
+            --env SMTP_PORT=587
+            --env SMTP_USERNAME=ci-smtp-user
+            --env SMTP_PASSWORD=ci-only-smtp-password
+            --env SMTP_USE_TLS=true
+            --env SMTP_USE_SSL=false
+            --env SMTP_TIMEOUT=10
+            --env DATABASE_HOST=commerce-backend-postgres
+            --env DATABASE_NAME=commerce_ci
+            --env DATABASE_USER=commerce_ci
+            --env DATABASE_PASSWORD=ci-only-password
+            --env DATABASE_PORT=5432
+          )
 
-      - name: Tear down services
-        if: always()
-        run: docker compose down
+          docker run --rm "${runtime_environment[@]}" "${image}" pytest
+          docker run --rm "${runtime_environment[@]}" \
+            "${image}" python manage.py check
+          docker run --rm "${runtime_environment[@]}" \
+            --env DJANGO_SECURE_SSL_REDIRECT=true \
+            "${image}" python manage.py check --deploy
+          docker run --rm "${runtime_environment[@]}" \
+            "${image}" python manage.py migrate --noinput
+          docker run --rm "${runtime_environment[@]}" \
+            "${image}" python manage.py shell --command \
+            "from django.contrib.auth import get_user_model; get_user_model().objects.create_superuser('admin-csrf-smoke', 'admin-csrf@example.invalid', 'ci-only-admin-password')"
+
+          docker run --detach \
+            --name commerce-backend-app \
+            --publish 8000:8000 \
+            --env PORT=8000 \
+            "${runtime_environment[@]}" \
+            --env DJANGO_SECURE_SSL_REDIRECT=true \
+            "${image}"
+
+          healthy=false
+          for _ in {1..30}; do
+            if response=$(curl --fail --silent --show-error \
+              --header 'Host: healthcheck.railway.app' \
+              --header 'X-Forwarded-Proto: https' \
+              http://127.0.0.1:8000/health/); then
+              test "$(jq -r '.status' <<<"${response}")" = "ok"
+              test "$(jq -r '.database' <<<"${response}")" = "ok"
+              healthy=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "${healthy}" != true ]; then
+            docker logs commerce-backend-app
+            exit 1
+          fi
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' \
+            --header 'Host: healthcheck.railway.app' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8000/admin/)" = "302"
+          curl --fail --silent --show-error \
+            --header 'Host: healthcheck.railway.app' \
+            --header 'X-Forwarded-Proto: https' \
+            http://127.0.0.1:8000/static/admin/css/base.css \
+            >/dev/null
+
+          docker run --detach \
+            --name commerce-frontend-proxy \
+            --network commerce-backend-ci \
+            --publish 8080:8080 \
+            --env PORT=8080 \
+            --env BACKEND_HOST=commerce-backend-app \
+            --env BACKEND_PORT=8000 \
+            "${FRONTEND_IMAGE}:${GITHUB_SHA}"
+          for _ in {1..30}; do
+            if curl --fail --silent --show-error \
+              http://127.0.0.1:8080/ >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          ADMIN_SMOKE_USERNAME=admin-csrf-smoke \
+            ADMIN_SMOKE_PASSWORD=ci-only-admin-password \
+            PUBLIC_HOST=commerce.example \
+            scripts/admin-csrf-smoke.sh
+
+      - name: Scan exact backend image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Export validated backend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          docker save "${BACKEND_IMAGE}:${GITHUB_SHA}" \
+            | gzip > backend-image.tar.gz
+
+      - name: Upload validated backend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-image-${{ github.sha }}
+          path: backend-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  test:
+    if: always()
+    needs:
+      - frontend-image-validation
+      - backend-image-validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require all validation jobs
+        env:
+          FRONTEND_RESULT: ${{ needs.frontend-image-validation.result }}
+          BACKEND_RESULT: ${{ needs.backend-image-validation.result }}
+        run: |
+          test "${FRONTEND_RESULT}" = "success"
+          test "${BACKEND_RESULT}" = "success"
+
+  publish-and-deploy-backend:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs:
+      - test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: commerce-architect-backend-development
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+
+    steps:
+      - name: Download validated backend image
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-image-${{ github.sha }}
+
+      - name: Load validated backend image
+        run: gunzip --stdout backend-image.tar.gz | docker load
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish immutable commit tag
+        run: docker push "${BACKEND_IMAGE}:${GITHUB_SHA}"
+
+      - name: Resolve published image digest
+        id: image
+        run: |
+          digest=$(docker buildx imagetools inspect \
+            "${BACKEND_IMAGE}:${GITHUB_SHA}" \
+            --format '{{.Manifest.Digest}}')
+          case "${digest}" in
+            sha256:*) ;;
+            *) echo "Unable to resolve the published image digest."; exit 1 ;;
+          esac
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "Deploying ${BACKEND_IMAGE}:${GITHUB_SHA} (${digest})"
+
+      - name: Deploy exact image digest to Railway development
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          jq --null-input \
+            --arg image "${BACKEND_IMAGE}@${IMAGE_DIGEST}" \
+            '{services: {"93c267b7-e8cd-49c4-be9b-abe34aaa4373": {source: {image: $image}}}}' \
+          | npx --yes @railway/cli@5.37.4 environment edit \
+            --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+            --environment development \
+            --message "Deploy backend ${GITHUB_SHA}" \
+            --json
+
+      - name: Require successful Railway deployment
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          expected_image="${BACKEND_IMAGE}@${IMAGE_DIGEST}"
+          for _ in {1..60}; do
+            deployments=$(npx --yes @railway/cli@5.37.4 deployment list \
+              --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+              --environment development \
+              --service backend \
+              --limit 10 \
+              --json)
+            status=$(jq --raw-output --arg image "${expected_image}" \
+              '[.[] | select(.meta.image == $image)][0].status // "NOT_FOUND"' \
+              <<<"${deployments}")
+            case "${status}" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|NEEDS_APPROVAL|SLEEPING|SKIPPED|REMOVED|REMOVING)
+                echo "Railway deployment reached terminal status: ${status}"
+                exit 1
+                ;;
+              NOT_FOUND|QUEUED|INITIALIZING|WAITING|BUILDING|DEPLOYING) sleep 10 ;;
+              *) echo "Unexpected Railway deployment status: ${status}"; exit 1 ;;
+            esac
+          done
+          echo "Railway deployment did not complete within 10 minutes."
+          exit 1
+
+  publish-and-deploy-frontend:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs:
+      - test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: commerce-architect-frontend-development
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+
+    steps:
+      - name: Download validated frontend image
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-image-${{ github.sha }}
+
+      - name: Load validated frontend image
+        run: gunzip --stdout frontend-image.tar.gz | docker load
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish immutable frontend commit tag
+        run: docker push "${FRONTEND_IMAGE}:${GITHUB_SHA}"
+
+      - name: Resolve published frontend image digest
+        id: image
+        run: |
+          digest=$(docker buildx imagetools inspect \
+            "${FRONTEND_IMAGE}:${GITHUB_SHA}" \
+            --format '{{.Manifest.Digest}}')
+          case "${digest}" in
+            sha256:*) ;;
+            *) echo "Unable to resolve the published frontend image digest."; exit 1 ;;
+          esac
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "Deploying ${FRONTEND_IMAGE}:${GITHUB_SHA} (${digest})"
+
+      - name: Deploy exact frontend image digest to Railway development
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          jq --null-input \
+            --arg image "${FRONTEND_IMAGE}@${IMAGE_DIGEST}" \
+            '{services: {"430aa8c4-88a5-4b7f-b433-9c0a3ff6e642": {source: {image: $image}}}}' \
+          | npx --yes @railway/cli@5.37.4 environment edit \
+            --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+            --environment development \
+            --message "Deploy frontend ${GITHUB_SHA}" \
+            --json
+
+      - name: Require successful Railway frontend deployment
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          expected_image="${FRONTEND_IMAGE}@${IMAGE_DIGEST}"
+          for _ in {1..60}; do
+            deployments=$(npx --yes @railway/cli@5.37.4 deployment list \
+              --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+              --environment development \
+              --service frontend \
+              --limit 10 \
+              --json)
+            status=$(jq --raw-output --arg image "${expected_image}" \
+              '[.[] | select(.meta.image == $image)][0].status // "NOT_FOUND"' \
+              <<<"${deployments}")
+            case "${status}" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|NEEDS_APPROVAL|SLEEPING|SKIPPED|REMOVED|REMOVING)
+                echo "Railway frontend deployment reached terminal status: ${status}"
+                exit 1
+                ;;
+              NOT_FOUND|QUEUED|INITIALIZING|WAITING|BUILDING|DEPLOYING) sleep 10 ;;
+              *) echo "Unexpected Railway frontend deployment status: ${status}"; exit 1 ;;
+            esac
+          done
+          echo "Railway frontend deployment did not complete within 10 minutes."
+          exit 1
+
+  record-development-promotion:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs:
+      - publish-and-deploy-backend
+      - publish-and-deploy-frontend
+    runs-on: ubuntu-latest
+    concurrency:
+      group: commerce-architect-promotion-record-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify development deployment identities
+        env:
+          BACKEND_DIGEST: ${{ needs.publish-and-deploy-backend.outputs.digest }}
+          FRONTEND_DIGEST: ${{ needs.publish-and-deploy-frontend.outputs.digest }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          backend_image="${BACKEND_IMAGE}@${BACKEND_DIGEST}"
+          frontend_image="${FRONTEND_IMAGE}@${FRONTEND_DIGEST}"
+          case "${BACKEND_DIGEST}" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "Backend digest is missing or malformed."; exit 1 ;;
+          esac
+          case "${FRONTEND_DIGEST}" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "Frontend digest is missing or malformed."; exit 1 ;;
+          esac
+
+          backend_deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
+            --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+            --environment ce144653-b03a-4d0f-b306-3b0aabff8dda \
+            --service 93c267b7-e8cd-49c4-be9b-abe34aaa4373 \
+            --limit 10 --json)
+          frontend_deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
+            --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+            --environment ce144653-b03a-4d0f-b306-3b0aabff8dda \
+            --service 430aa8c4-88a5-4b7f-b433-9c0a3ff6e642 \
+            --limit 10 --json)
+          test "$(jq --raw-output \
+            '[.[] | select(.status == "SUCCESS")][0].meta.image' \
+            <<<"${backend_deployments}")" = "${backend_image}"
+          test "$(jq --raw-output \
+            '[.[] | select(.status == "SUCCESS")][0].meta.image' \
+            <<<"${frontend_deployments}")" = "${frontend_image}"
+
+      - name: Require development public smoke checks
+        env:
+          DEVELOPMENT_URL: https://dev-commerce.empowerment-forge.com
+        run: |
+          set -euo pipefail
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${DEVELOPMENT_URL}/")" = "200"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' \
+            "${DEVELOPMENT_URL}/client-side-route")" = "200"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' \
+            "${DEVELOPMENT_URL}/api/products/")" = "200"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' \
+            "${DEVELOPMENT_URL}/api/auth/me/")" = "401"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${DEVELOPMENT_URL}/api/")" = "404"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${DEVELOPMENT_URL}/admin/")" = "302"
+          curl --fail --silent --show-error \
+            "${DEVELOPMENT_URL}/static/admin/css/base.css" >/dev/null
+
+          for prefix in api admin static; do
+            headers="/tmp/development-${prefix}-headers"
+            status=$(curl --silent --show-error --output /dev/null \
+              --dump-header "${headers}" --write-out '%{http_code}' \
+              "${DEVELOPMENT_URL}/${prefix}")
+            test "${status}" = "308"
+            location=$(awk 'tolower($1) == "location:" {
+              sub(/\r$/, "", $2); print $2
+            }' "${headers}")
+            test "${location}" = "/${prefix}/"
+            case "${location}" in
+              http://*|*railway.internal*|*:8080*|*:8000*)
+                echo "Unsafe bare-prefix redirect: ${location}"
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Create immutable promotion record
+        env:
+          BACKEND_DIGEST: ${{ needs.publish-and-deploy-backend.outputs.digest }}
+          FRONTEND_DIGEST: ${{ needs.publish-and-deploy-frontend.outputs.digest }}
+          PROMOTION_RECORD_IMAGE: ghcr.io/empowerment-forge/commerce-architect-promotion-records
+        run: |
+          set -euo pipefail
+          jq --null-input \
+            --arg source_sha "${GITHUB_SHA}" \
+            --arg backend_image "${BACKEND_IMAGE}" \
+            --arg backend_digest "${BACKEND_DIGEST}" \
+            --arg frontend_image "${FRONTEND_IMAGE}" \
+            --arg frontend_digest "${FRONTEND_DIGEST}" '
+              {
+                schema: "commerce-architect-promotion/v1",
+                source_sha: $source_sha,
+                backend: {
+                  image: $backend_image,
+                  digest: $backend_digest
+                },
+                frontend: {
+                  image: $frontend_image,
+                  digest: $frontend_digest
+                },
+                development: {
+                  environment_id: "ce144653-b03a-4d0f-b306-3b0aabff8dda",
+                  backend_service_id: "93c267b7-e8cd-49c4-be9b-abe34aaa4373",
+                  frontend_service_id: "430aa8c4-88a5-4b7f-b433-9c0a3ff6e642",
+                  deployment_completed: true
+                }
+              }
+            ' >promotion.json
+
+          record_ref="${PROMOTION_RECORD_IMAGE}:${GITHUB_SHA}"
+          if record_digest=$(oras resolve "${record_ref}" 2>/dev/null); then
+            if ! [[ "${record_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Existing promotion record has an invalid manifest digest."
+              exit 1
+            fi
+            mkdir existing-record
+            oras pull "${PROMOTION_RECORD_IMAGE}@${record_digest}" \
+              --output existing-record
+            if ! cmp --silent promotion.json existing-record/promotion.json; then
+              echo "Refusing to overwrite a different promotion record for ${GITHUB_SHA}."
+              exit 1
+            fi
+            echo "The immutable promotion record already exists and matches."
+          else
+            oras push \
+              --artifact-type application/vnd.commerce-architect.promotion.v1 \
+              "${record_ref}" \
+              promotion.json:application/vnd.commerce-architect.promotion.v1+json
+            record_digest=$(oras resolve "${record_ref}")
+          fi
+
+          if ! [[ "${record_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unable to resolve the promotion record manifest digest."
+            exit 1
+          fi
+          echo "Recorded tested development artifacts for ${GITHUB_SHA} at ${record_digest}."

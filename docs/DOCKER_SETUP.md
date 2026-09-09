@@ -2,13 +2,14 @@
 
 ## Purpose
 
-This document explains how to run the Commerce Architect PostgreSQL, Django, and
+This **local-development-only** document explains how to run the Commerce Architect PostgreSQL, Django, and
 React/Vite development services locally with either Podman Compose or Docker
 Compose. The checked-in `docker-compose.yml` is compatible with both workflows;
 use the container runtime that fits your development environment.
 
-GitHub Actions CI currently uses Docker Compose. Local Linux development can use
-Podman and Podman Compose without changing the Compose file.
+Hosted environments and CI do not use this Compose topology. See
+[BUILD_DEPLOY.md](BUILD_DEPLOY.md). Local Linux development can use Podman and
+Podman Compose without changing the Compose file.
 
 ------------------------------------------------------------------------
 
@@ -66,6 +67,20 @@ podman-compose --version
 ```
 
 The Compose file uses OCI-compatible images and works with Podman Compose.
+
+### Podman command convention
+
+Use `podman-compose` for application lifecycle and orchestration (`up`, `start`,
+`stop`, `down`, `ps`, and `logs`). Use direct `podman exec` commands to run
+tools inside the deliberately named running containers: `commerce_web`,
+`commerce_db`, and `commerce_frontend`.
+
+Commerce Architect observed `podman-compose` 1.0.6 echoing a generated `exec`
+command containing expanded environment values. Version 1.6.0 was manually
+verified not to exhibit that behavior. The project nevertheless uses direct
+`podman exec` for commands in running containers and `podman-compose` for
+lifecycle/orchestration. The ignored `.env` file remains the supported location
+for local secret overrides; it was not the cause of the observed disclosure.
 
 ## Windows / WSL2 / Docker Desktop
 
@@ -142,12 +157,53 @@ production.
 | `DATABASE_USER` | Derived from `POSTGRES_USER` | Required |
 | `DATABASE_PASSWORD` | Fixed local-only value | Required; known development values are rejected |
 | `DATABASE_PORT` | `5432` | Optional; defaults to `5432` |
+| `AUTH_REQUIRE_VERIFIED_EMAIL` | `true` in Compose to exercise the full flow | Explicit policy; defaults to `false` outside Compose for existing-account compatibility |
+| `AUTH_EMAIL_VERIFICATION_TTL_SECONDS` | `86400` | Positive token lifetime |
+| `AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS` | `60` | Non-negative resend cooldown |
+| `AUTH_PASSWORD_RECOVERY_TTL_SECONDS` | `1800` | Positive recovery-token lifetime |
+| `AUTH_PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS` | `60` | Non-negative per-account recovery cooldown |
+| `AUTH_FRONTEND_BASE_URL` | `http://localhost:5173` | Required absolute HTTPS URL in production |
+| `EMAIL_BACKEND` | First-party readable console backend | Required delivery-capable backend in production |
+| `DEFAULT_FROM_EMAIL` | Local non-delivery sender | Required non-local sender in production |
+| `SMTP_HOST` | Unused by console mode | Required when SMTP is selected |
+| `SMTP_PORT` | `587` | Integer from 1 through 65535 |
+| `SMTP_USERNAME` | Unused by console mode | Required when SMTP is selected |
+| `SMTP_PASSWORD` | Unused by console mode | Required secret when SMTP is selected |
+| `SMTP_USE_TLS` | `true` | Explicit TLS; mutually exclusive with SSL |
+| `SMTP_USE_SSL` | `false` | Implicit TLS; mutually exclusive with TLS |
+| `SMTP_TIMEOUT` | `10` | Positive timeout in seconds |
 
 Production fails startup if its Django secret is absent, shorter than 50
 characters, begins with `django-insecure-`, or contains `changeme`. It also
 fails if debug is enabled, deployment hosts are absent, only development hosts
 are supplied, database settings are missing, or a known development database
 password is reused.
+
+### Local email modes
+
+The default local console mode requires no external provider. Keep
+`EMAIL_BACKEND=accounts.mail.ReadableConsoleEmailBackend`; the first-party
+backend prints the plain message body without MIME transfer encoding. Follow
+the `web` logs after registration:
+
+```bash
+podman-compose logs -f web
+# or: docker compose logs -f web
+```
+
+Open the printed `http://localhost:5173/verify-email?...` link in the browser.
+No external email provider is needed.
+
+For real SMTP UAT, copy `.env.example` to the ignored `.env`, select
+`django.core.mail.backends.smtp.EmailBackend`, and set the standard `SMTP_*`
+variables plus the verified `DEFAULT_FROM_EMAIL`. The application has no
+provider SDK dependency. Put the actual SMTP password only in `.env`, then
+restart the web service. TLS and SSL cannot both be enabled.
+
+Production rejects missing/insecure frontend URL, console/dummy/in-memory email
+backends, a local sender, incomplete SMTP credentials, and invalid SMTP options.
+Password recovery reuses the same mailer and frontend base URL; no additional
+provider credential or SDK is required.
 
 ## HTTPS and Proxy Variables
 
@@ -174,13 +230,14 @@ deliberate CORS and CSRF review; `SameSite=None` is not a default.
 Run the ordinary and deployment-oriented Django checks with:
 
 ```bash
-podman-compose exec -T web python manage.py check
-podman-compose exec -T web python manage.py check --deploy
+podman exec -i commerce_web python manage.py check
+podman exec -i commerce_web python manage.py check --deploy
 ```
 
-Use `docker compose` in place of `podman-compose` for Docker. The deployment
-check must also run in the real production environment so it evaluates the
-production variables rather than the intentionally relaxed development values.
+Docker users may instead run `docker compose exec -T web` followed by the same
+command. The deployment check must also run in the real production environment
+so it evaluates production variables rather than the intentionally relaxed
+development values.
 
 ------------------------------------------------------------------------
 
@@ -223,12 +280,14 @@ runtime selected during onboarding.
 | Follow all logs | `podman-compose logs -f` | `docker compose logs -f` |
 | Follow Django logs | `podman-compose logs -f web` | `docker compose logs -f web` |
 | Follow frontend logs | `podman-compose logs -f frontend` | `docker compose logs -f frontend` |
-| Run backend tests | `podman-compose exec -T web pytest` | `docker compose exec -T web pytest` |
-| Run frontend tests | `podman-compose exec -T frontend npm run test -- --run` | `docker compose exec -T frontend npm run test -- --run` |
-| Build the frontend | `podman-compose exec -T frontend npm run build` | `docker compose exec -T frontend npm run build` |
-| Lint the frontend | `podman-compose exec -T frontend npm run lint` | `docker compose exec -T frontend npm run lint` |
-| Apply Django migrations | `podman-compose exec web python manage.py migrate` | `docker compose exec web python manage.py migrate` |
-| Open the Django shell | `podman-compose exec web python manage.py shell` | `docker compose exec web python manage.py shell` |
+| Run backend tests | `podman exec -i commerce_web pytest` | `docker compose exec -T web pytest` |
+| Run Django checks | `podman exec -i commerce_web python manage.py check` | `docker compose exec -T web python manage.py check` |
+| Check migration consistency | `podman exec -i commerce_web python manage.py makemigrations --check --dry-run` | `docker compose exec -T web python manage.py makemigrations --check --dry-run` |
+| Run frontend tests | `podman exec -i commerce_frontend npm run test -- --run` | `docker compose exec -T frontend npm run test -- --run` |
+| Build the frontend | `podman exec -i commerce_frontend npm run build` | `docker compose exec -T frontend npm run build` |
+| Lint the frontend | `podman exec -i commerce_frontend npm run lint` | `docker compose exec -T frontend npm run lint` |
+| Apply Django migrations | `podman exec -it commerce_web python manage.py migrate` | `docker compose exec web python manage.py migrate` |
+| Open the Django shell | `podman exec -it commerce_web python manage.py shell` | `docker compose exec web python manage.py shell` |
 | Synchronize changed frontend dependencies | `podman-compose restart frontend` | `docker compose restart frontend` |
 
 After `backend/Dockerfile`, a Compose service, or another image-build change,
@@ -240,6 +299,29 @@ frontend source directories are bind-mounted. A frontend lockfile change
 requires only a frontend restart; startup `npm ci` synchronizes the dependency
 volume.
 
+## Updating Python dependencies
+
+Declare direct backend and test dependencies in `backend/requirements.in`.
+`backend/requirements.txt` is the generated, committed lock consumed by the
+backend image, local Compose, and CI; do not edit its transitive pins by hand.
+
+From the repository root, regenerate it with the supported Python 3.12 and the
+documented compiler version:
+
+```bash
+python3.12 -m venv .venv-lock
+.venv-lock/bin/python -m pip install pip-tools==7.5.2
+.venv-lock/bin/pip-compile --strip-extras \
+    --output-file=backend/requirements.txt \
+    backend/requirements.in
+```
+
+Review changes to both requirements files, rebuild with
+`podman-compose up --build -d` (or `docker compose up --build -d`), then run the
+backend test, Django check, and migration-consistency commands above. To upgrade
+all allowed dependencies intentionally, rerun the final command with
+`--upgrade`; to upgrade one package, use `--upgrade-package PACKAGE`.
+
 ------------------------------------------------------------------------
 
 # Migration Workflow
@@ -250,7 +332,7 @@ are added.
 With Podman Compose:
 
 ```bash
-podman-compose exec web python manage.py migrate
+podman exec -it commerce_web python manage.py migrate
 ```
 
 With Docker Compose:
@@ -263,7 +345,7 @@ When intentionally changing Django models, generate migration files with the
 corresponding runtime command:
 
 ```bash
-podman-compose exec web python manage.py makemigrations
+podman exec -it commerce_web python manage.py makemigrations
 ```
 
 or:
@@ -282,7 +364,7 @@ applies checked-in migration instructions to PostgreSQL.
 With Podman Compose:
 
 ```bash
-podman-compose exec web python manage.py createsuperuser
+podman exec -it commerce_web python manage.py createsuperuser
 ```
 
 With Docker Compose:
@@ -304,7 +386,7 @@ http://localhost:8000/admin/
 With Podman Compose:
 
 ```bash
-podman-compose exec db psql -U commerce -d commerce_db
+podman exec -it commerce_db psql -U commerce -d commerce_db
 ```
 
 With Docker Compose:
@@ -358,6 +440,12 @@ docker compose down
 Normal shutdown should use `stop` or `down` without `-v`. Both preserve the
 PostgreSQL data volume and frontend dependency volume.
 
+`postgres_data` is a Compose-managed named volume, not a fixed repository or
+host filesystem path. Its physical location depends on the container runtime
+and operating system. Inspect it through `docker volume ls` and
+`docker volume inspect`, or `podman volume ls` and `podman volume inspect`,
+rather than depending on an underlying host path.
+
 ------------------------------------------------------------------------
 
 # Full Volume Reset (Destructive)
@@ -393,8 +481,9 @@ After resetting the volume, apply migrations again before using the application.
     source bind mount lets Vite observe host edits and provide hot module
     replacement without rebuilding the image.
 -   Inside Compose, `VITE_API_PROXY_TARGET=http://web:8000` directs Vite's
-    `/api` proxy to Django over the Compose network. Native host Vite development
-    still defaults to `http://localhost:8000` when that variable is unset.
+    `/api`, `/admin`, and `/static` proxies to Django over the Compose network.
+    Native host Vite development still defaults to `http://localhost:8000` when
+    that variable is unset.
 -   PostgreSQL listens on port `5432` and persists data in `postgres_data`.
 -   `DATABASE_HOST=db` is correct inside the Compose network; it should not be
     replaced with `localhost` in the container configuration.
@@ -404,12 +493,9 @@ After resetting the volume, apply migrations again before using the application.
     dependency changes are synchronized from `frontend/package-lock.json` by
     `npm ci` at container startup. Restarting `frontend` is sufficient after a
     lockfile change; deleting `frontend_node_modules` is not normally necessary.
--   This container runs the Vite development server only. A future production
-    deployment may build the React application and publish its static assets to
-    dedicated frontend or static hosting instead. Likewise, local containerized
-    PostgreSQL does not require production to use a PostgreSQL container; a
-    managed PostgreSQL service remains a valid future choice. Production hosting
-    is intentionally undecided.
--   GitHub Actions runs frontend tests with its Node 24 setup, then builds and
-    starts only `web` and `db` for backend tests. It does not duplicate frontend
-    dependency installation or tests in the Compose frontend service.
+-   This container runs the Vite development server only. Hosted environments
+    use the production frontend image, NGINX, and persistent PostgreSQL as
+    documented in [ARCHITECTURE.md](ARCHITECTURE.md). Local volumes and database
+    credentials never transfer to hosted environments.
+-   GitHub Actions validates the production frontend and backend images directly;
+    this Compose frontend remains a local developer convenience.

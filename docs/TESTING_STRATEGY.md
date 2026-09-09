@@ -1,256 +1,87 @@
+# Testing Strategy
 
-# TESTING_STRATEGY.md
-Version: 1.0
-Status: Active Testing Doctrine
+## Purpose
 
----
+This document defines the repository's current test layers and quality gates.
+It describes what the maintained suites prove. Validation results in pull
+requests follow [VALIDATION_STANDARDS.md](VALIDATION_STANDARDS.md).
 
-# 1. Purpose
+## Principles
 
-This document defines the full testing strategy for the Commerce Platform.
+1. Test observable behavior and stable contracts, not implementation trivia.
+2. Keep business rules in the backend and test them at that boundary.
+3. Test frontend rendering, interaction, state transitions, and API-client
+   behavior through accessible selectors.
+4. Keep tests deterministic and fix root causes rather than weakening coverage.
+5. Distinguish component evidence from real-browser, device, and deployed UAT.
 
-It covers:
+## Backend
 
-- Backend API testing (pytest + Django)
-- Authentication testing
-- React component testing
-- React integration testing
-- End-to-end (E2E) testing
-- CI integration
-- Codex-driven test generation standards
+Pytest and pytest-django cover the real Django application with PostgreSQL.
+Maintained coverage includes:
 
-This is the single source of truth for how we ensure quality.
+- product models and API behavior;
+- database-aware health behavior;
+- registration, verification, email change, login, refresh, logout, and `/me`;
+- enumeration resistance, token lifecycle, password recovery, and session
+  revocation;
+- development/production security-setting boundaries.
 
----
+Run the suite through the Compose backend service:
 
-# 2. Core Testing Philosophy
-
-We enforce the following principles:
-
-1. Test behavior, not implementation details.
-2. Keep business logic in the backend — test it there.
-3. Keep frontend logic minimal — test rendering and state transitions.
-4. Protect contracts (API shape must remain stable).
-5. Fail fast in CI.
-6. Never weaken tests to “make them pass.” Fix the root cause.
-
----
-
-# 3. Backend Testing (Django + Pytest)
-
-## 3.1 Framework
-
-- pytest
-- pytest-django
-- Django TestClient
-- SimpleJWT auth tests
-
-All backend tests run inside Docker:
-
+```bash
 docker compose exec -T web pytest
-
-CI executes this automatically.
-
----
-
-## 3.2 What We Test
-
-### Model Tests
-- Decimal precision for price
-- Field constraints
-- Default values
-- Business rules normalization
-
-### API Tests
-- GET /api/products
-- Auth-protected endpoints
-- JWT issuance
-- Refresh rotation
-- Blacklist enforcement
-
-### Health Endpoint
-- Returns 200
-- Database connectivity validated
-
----
-
-# 4. Frontend Testing Strategy (React + Vite + TypeScript + Tailwind)
-
-Frontend testing is layered.
-
----
-
-## 4.1 Unit Testing (Component-Level)
-
-Tools:
-- Vitest or Jest
-- React Testing Library
-- @testing-library/jest-dom
-
-What we test:
-
-ProductCard:
-- Renders name
-- Renders price
-- Truncates description
-- No crashes with valid props
-
-ProductListPage:
-- Loading state renders
-- Error state renders
-- Products render correctly
-
-Rules:
-- No CSS class assertions
-- Test by role, text, or accessible selectors
-- Mock API responses
-
----
-
-## 4.2 Integration Testing (UI + API Layer)
-
-Tools:
-- React Testing Library
-- MSW (Mock Service Worker)
-
-What we test:
-- API success → grid renders
-- API failure → error shown
-- Empty response → empty state shown
-
-MSW simulates:
-GET /api/products/
-
-No real backend required for these tests.
-
----
-
-## 4.3 End-to-End (E2E) Testing
-
-Tools:
-- Playwright (preferred)
-- Cypress (alternative)
-
-Scope:
-- Login flow
-- Token storage behavior
-- Product listing renders
-- Mobile responsiveness
-- Auth-protected routes redirect correctly
-
-These tests use real Django + real frontend build.
-
----
-
-# 5. CI Integration
-
-Backend tests already run in CI:
-
-- Build Docker
-- Start services
-- Run pytest
-
-Frontend tests will be added:
-
-Example CI additions:
-
-- name: Install frontend dependencies
-  run: npm ci --prefix frontend
-
-- name: Run frontend unit tests
-  run: npm run test --prefix frontend
-
-- name: Run E2E tests
-  run: npm run e2e --prefix frontend
-
-CI must fail if any layer fails.
-
----
-
-# 6. Testing Evolution Plan
-
-Phase 1:
-- Backend fully tested
-- Frontend unit + integration tests
-
-Phase 2:
-- E2E mandatory
-- Auth Code + PKCE flows tested
-- Role-based UI tested
-
----
-
-# 7. Codex Prompt Template for Frontend Testing
-
-Use the following prompt when generating frontend tests:
-
-------------------------------------------------------------
-
-You are an AI assistant modifying the repository directly.
-
-Objective:
-Implement a full frontend testing suite for the React SPA.
-
-Requirements:
-
-1. Install and configure:
-   - Vitest (or Jest)
-   - React Testing Library
-   - @testing-library/jest-dom
-   - MSW for API mocking
-
-2. Create tests for:
-
-   ProductCard:
-   - Renders name
-   - Renders price
-   - Truncates description correctly
-
-   ProductListPage:
-   - Shows loading state
-   - Shows error state on failed API
-   - Renders products on success
-
-3. Mock GET /api/products using MSW.
-
-4. Ensure tests run with:
-   npm run test
-
-5. Do NOT modify backend code.
-6. Do NOT alter business logic.
-7. Output summary of files created.
-8. Do not commit automatically.
-
-------------------------------------------------------------
-
----
-
-# 8. Quality Standard
-
-Before merging any feature branch:
-
-- Backend pytest passes
-- Frontend tests pass
-- No console warnings
-- CI passes
-
-Quality gates are mandatory.
-
----
-
-# 9. Definition of Done (Testing Perspective)
-
-A feature is complete when:
-
-- Business logic validated
-- API contract verified
-- UI state transitions tested
-- CI pipeline green
-- No weakened tests
-
----
-
-This document defines how we protect quality as the platform scales.
-
-Testing is not optional.
-Testing is part of the architecture.
+```
+
+Use `podman-compose` in the supported Podman workflow. CI runs pytest against
+the validated production backend image with disposable PostgreSQL, then runs
+Django system, deployment, migration, and runtime checks.
+
+## Frontend
+
+Vitest, React Testing Library, and jest-dom cover components, application
+journeys, and the fetch-based API client. Maintained coverage includes product
+states, authentication/account interactions, verification and recovery pages,
+single-flight refresh/retry, and logout cleanup.
+
+Tests use roles, labels, text, and accessible state where possible. jsdom can
+verify DOM and interaction contracts, but it does not prove pixel layout,
+responsive fit, browser networking, email delivery, or deployed behavior.
+Those claims require the appropriate browser/device or environment acceptance.
+
+Run the frontend checks through Compose or from `frontend/`:
+
+```bash
+npm run test -- --run
+npm run lint
+npm run build
+```
+
+## Production Images and Routing
+
+CI builds each production image once and validates that exact artifact. The
+frontend runtime checks cover SPA fallback, backend proxy behavior, safe
+bare-prefix redirects, and dotfile rejection. The backend runtime checks cover
+startup, database migrations, Django health, and deployment security settings.
+Trivy scans both production images for fixed HIGH/CRITICAL findings.
+
+Successful `develop` pushes publish and deploy validated images by immutable
+digest, require public development smoke checks, and create an immutable
+promotion record. Pull requests to `develop` validate without deployment.
+`develop` to `main` release pull requests validate their pinned promotion
+record; the merged release promotes those exact digests without rebuilding.
+See [BUILD_DEPLOY.md](BUILD_DEPLOY.md) for the canonical trigger matrix.
+
+## Human and End-to-End Acceptance
+
+Browser end-to-end automation is not currently part of CI. Feature-specific
+manual acceptance records live under `uat-testing/` where needed. Responsive
+layout, real email delivery, browser history behavior, and post-deployment
+journeys must not be claimed from component tests alone.
+
+## Merge Standard
+
+Before merge, run the checks relevant to the changed slice, confirm CI passes,
+and report both important behavior and any remaining human-only verification.
+Feature/task acceptance criteria still define the exact coverage required;
+this document does not replace them.

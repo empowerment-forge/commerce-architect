@@ -1,7 +1,10 @@
 
-# PRODUCTLIST_UX.md
-Version: 1.0
-Status: Phase 1B Implementation Spec
+# Product List UX v1.0
+
+> **Historical implementation specification:** retained as the Phase 1B product
+> list acceptance record. It is not the current general UX authority; see
+> [UX_ARCHITECTURE.md](UX_ARCHITECTURE.md) and
+> [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 

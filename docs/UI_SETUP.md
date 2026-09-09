@@ -85,8 +85,8 @@ when reproducing the repository's known environment.
 For this optional native mode, run `npm ci` after cloning the repository and
 whenever the checked-in frontend dependency files change. `npm run dev` starts
 Vite on `http://localhost:5173/`. When `VITE_API_PROXY_TARGET` is unset, native
-Vite proxies `/api` to `http://localhost:8000`, where the Compose `web` service is
-published to the host.
+Vite proxies `/api`, `/admin`, and `/static` to `http://localhost:8000`, where
+the Compose `web` service is published to the host.
 
 ## Native Frontend Commands
 
@@ -120,9 +120,10 @@ Open the following address in a browser:
 http://localhost:5173/
 ```
 
-The currently implemented UI is the Commerce Architect product-list frontend. It
-requests the product collection from the Django API and displays loading, error,
-empty, or product-card states based on the response.
+The implemented UI includes the product-list experience plus registration,
+email verification, login, account management, email change, password recovery,
+and logout. The product page displays loading, error, empty, or product-card
+states based on the Django API response.
 
 ## Frontend/backend development architecture
 
@@ -131,19 +132,22 @@ During preferred Compose-managed local development, requests follow this path:
 ```text
 Browser
    -> Vite development server on localhost:5173
-   -> /api proxy
+   -> /api, /admin, or /static proxy
    -> Django/DRF at web:8000 on the Compose network
    -> PostgreSQL
 ```
 
-The product page requests `/api/products/`. In `frontend/vite.config.ts`, Vite is
-configured to proxy every request beginning with `/api` to
-the `VITE_API_PROXY_TARGET` value. Compose sets that value to
-`http://web:8000`, because `localhost` inside the frontend container would refer
-to the frontend container itself. When Vite is run natively and the variable is
-unset, the target defaults to `http://localhost:8000`. The browser sends a
-same-origin request to Vite on port 5173, Vite preserves the `/api` path and
-forwards it to Django, and Django reads product data from PostgreSQL.
+The product page requests `/api/products/`. Django admin is available through
+`http://localhost:5173/admin/`; its `/static/` assets follow the same proxy.
+Direct `http://localhost:8000/admin/` access remains available for backend
+debugging. In `frontend/vite.config.ts`, Vite proxies requests beginning with
+`/api`, `/admin`, or `/static` to the `VITE_API_PROXY_TARGET` value. Compose
+sets that value to `http://web:8000`, because `localhost` inside the frontend
+container would refer to the frontend container itself. When Vite is run
+natively and the variable is unset, the target defaults to
+`http://localhost:8000`. The browser sends a same-origin request to Vite on port
+5173, Vite preserves the path and forwards it to Django, and Django reads
+product data from PostgreSQL.
 
 This proxy applies while using the Vite development server. The API client also
 supports a `VITE_API_BASE_URL` environment value, but when it is unset—as in the
@@ -210,9 +214,7 @@ A normal frontend session is:
    Podman Compose command).
 4. Stop the stack with the Compose `down` command for the selected runtime.
 
-This local development container is not a production frontend deployment
-decision. A future production environment may build the React application and
-host the resulting assets through a dedicated frontend or static hosting
-provider instead of running Vite. Local containerized PostgreSQL likewise does
-not determine the production database deployment model; managed PostgreSQL
-remains a valid future option.
+This local development container is not the hosted frontend runtime. Hosted
+development builds React once and serves `dist` through NGINX; same-origin
+`/api/`, `/admin/`, and `/static/` requests are proxied privately to Django.
+Persistent PostgreSQL is hosted state. See [ARCHITECTURE.md](ARCHITECTURE.md).

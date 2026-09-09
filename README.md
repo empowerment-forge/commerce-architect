@@ -21,10 +21,10 @@ the repository root.
 ## Current Status
 
 -   Django + DRF backend operational
--   PostgreSQL 16 running in a containerized local environment
--   React/Vite frontend with a product-list UI
+-   PostgreSQL 16 locally and persistent PostgreSQL in hosted environments
+-   React/Vite frontend with product and end-to-end authentication UI
 -   Podman-compatible local development through the shared Compose file
--   Docker Compose-based CI in GitHub Actions
+-   Production-image validation and immutable deployment in GitHub Actions
 -   Pytest backend tests and Vitest frontend tests
 
 ------------------------------------------------------------------------
@@ -73,10 +73,11 @@ React Testing Library**.
 -   React component and API-client behavior
 -   Type correctness (e.g., Decimal enforcement)
 
-## What We Do NOT Test
+## What Requires Other Validation
 
 -   Django admin UI rendering
--   CSS or styling
+-   Pixel layout and responsive fit require real-browser/device acceptance;
+    component tests do not prove rendered dimensions
 -   Static branding assets
 
 Admin is treated as a management surface, not core business logic.
@@ -95,17 +96,18 @@ Changes are not ready to merge until CI passes.
 
 # CI Pipeline (GitHub Actions)
 
-GitHub Actions CI uses Docker Compose with the same `docker-compose.yml` that is
-compatible with local Docker Compose and Podman Compose workflows.
+GitHub Actions builds the production frontend and backend images directly. It
+validates those exact images, scans them with Trivy, and runs backend integration
+tests against disposable PostgreSQL.
 
 The workflow:
 
 1.  Install locked frontend dependencies with Node.js 24
 2.  Run the Vitest frontend suite
-3.  Build and start the `db` and `web` Docker Compose services for backend
-    integration testing
-4.  Run pytest inside the `web` container
-5.  Tear down the services
+3.  Start disposable PostgreSQL and run pytest and Django checks against the
+    production backend image
+4.  Scan both validated images for fixed HIGH/CRITICAL findings
+5.  Preserve immutable image identity for approved deployment automation
 
 This checks both frontend and backend behavior while retaining an
 OCI-container-based, portable local architecture.
@@ -124,16 +126,20 @@ We follow a simplified GitFlow-inspired model.
 -   `develop`
     -   Integration branch
     -   All features merge here first
--   `feature/<name>`
-    -   One feature per branch
+-   Focused topic branches such as `feature/<name>`, `fix/<name>`, or
+    `docs/<name>`
+    -   One focused change per branch
     -   Must open PR into `develop`
 
 ------------------------------------------------------------------------
 
 ## CI Trigger Policy
 
-CI runs when: - A Pull Request targets `develop` - `develop` is merged
-into `main` - Manually triggered via GitHub Actions
+CI validates pull requests targeting `develop` and manual runs. A push to
+`develop` validates, publishes, and deploys immutable images to development,
+then records the tested image digests. A reviewed `develop` to `main` pull
+request promotes those exact digests to production after merge; `main` does not
+rebuild the application images.
 
 We do **not** run CI on every push to feature branches.
 
@@ -143,7 +149,7 @@ We do **not** run CI on every push to feature branches.
 
 Even as a solo developer:
 
--   All feature work happens on a feature branch.
+-   All changes happen on a focused topic branch.
 -   All changes go through PR review (even if self-reviewed).
 -   CI must pass before merge.
 
@@ -154,7 +160,7 @@ project grows.
 
 # Current Architecture Stack
 
-Backend: - Django 6.x - Django REST Framework - PostgreSQL 16
+Backend: - Django 6.1 - Django REST Framework - PostgreSQL 16
 
 Frontend: - React - TypeScript - Vite - Tailwind CSS
 
@@ -162,7 +168,7 @@ Local containers: - Docker Compose - Podman Compose-compatible
 
 Testing: - pytest - pytest-django - Vitest - React Testing Library
 
-CI: - GitHub Actions - Docker Compose-based pipeline
+CI: - GitHub Actions - exact-image tests/scans - digest-based deployment
 
 Future: - Stripe integration - Orders domain - Scheduling domain
 
@@ -202,17 +208,31 @@ development and the optional native Vite workflow.
 
 -   [Developer onboarding](docs/DEVELOPER_ONBOARDING.md) — first-time setup and
     daily workflow
+-   [Validation and PR reporting standards](docs/VALIDATION_STANDARDS.md) —
+    canonical validation-summary structure and reporting rules
+-   [Testing strategy](docs/TESTING_STRATEGY.md) — maintained automated test
+    layers, production-image checks, and human-validation boundaries
 -   [Docker and Podman setup](docs/DOCKER_SETUP.md) — local services,
     configuration, and checks
+-   [Current architecture](docs/ARCHITECTURE.md) — canonical runtime
+    topology and system boundaries
 -   [Architecture record](docs/ARCHITECTURE_v1.2.md) — frozen Phase 1 design
-    context
+    context, superseded where current implementation differs
 -   [Platform philosophy](docs/PLATFORM_PHILOSOPHY.md) — enduring project and
     adoption principles
 -   [Product roadmap](docs/ROADMAP.md) — current implementation and next steps
--   [Public-readiness roadmap](docs/COMMERCE_ARCHITECT_PUBLIC_ROADMAP.md) —
-    publication checklist and remaining release actions
+-   [Authentication architecture](docs/USERAUTH_ARCHITECTURE.md) — current
+    account, token, verification, and recovery design
+-   [Frontend and UX direction](docs/UX_ARCHITECTURE.md) — frontend technology,
+    responsibility, and experience guardrails
+-   [Build and deployment guide](docs/BUILD_DEPLOY.md) — provider-neutral build,
+    provisioning, deployment, validation, and operations contract
 -   [License map](LICENSE.md), [contribution guide](CONTRIBUTING.md), and
     [security policy](SECURITY.md) — repository policies
+
+Milestone-specific implementation assignments and UAT records remain under
+`docs/ai-prompts/` and `docs/uat-testing/`. They preserve implementation and
+acceptance history; the current-state documents above take precedence.
 
 ------------------------------------------------------------------------
 
