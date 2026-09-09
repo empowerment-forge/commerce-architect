@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - develop
-      - main
   pull_request:
     branches:
       - develop
@@ -350,6 +349,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
 
     steps:
       - name: Download validated backend image
@@ -440,6 +441,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
 
     steps:
       - name: Download validated frontend image
@@ -518,3 +521,167 @@ jobs:
           done
           echo "Railway frontend deployment did not complete within 10 minutes."
           exit 1
+
+  record-development-promotion:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs:
+      - publish-and-deploy-backend
+      - publish-and-deploy-frontend
+    runs-on: ubuntu-latest
+    concurrency:
+      group: commerce-architect-promotion-record-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify development deployment identities
+        env:
+          BACKEND_DIGEST: ${{ needs.publish-and-deploy-backend.outputs.digest }}
+          FRONTEND_DIGEST: ${{ needs.publish-and-deploy-frontend.outputs.digest }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          backend_image="${BACKEND_IMAGE}@${BACKEND_DIGEST}"
+          frontend_image="${FRONTEND_IMAGE}@${FRONTEND_DIGEST}"
+          case "${BACKEND_DIGEST}" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "Backend digest is missing or malformed."; exit 1 ;;
+          esac
+          case "${FRONTEND_DIGEST}" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "Frontend digest is missing or malformed."; exit 1 ;;
+          esac
+
+          backend_deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
+            --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+            --environment ce144653-b03a-4d0f-b306-3b0aabff8dda \
+            --service 93c267b7-e8cd-49c4-be9b-abe34aaa4373 \
+            --limit 10 --json)
+          frontend_deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
+            --project 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433 \
+            --environment ce144653-b03a-4d0f-b306-3b0aabff8dda \
+            --service 430aa8c4-88a5-4b7f-b433-9c0a3ff6e642 \
+            --limit 10 --json)
+          test "$(jq --raw-output \
+            '[.[] | select(.status == "SUCCESS")][0].meta.image' \
+            <<<"${backend_deployments}")" = "${backend_image}"
+          test "$(jq --raw-output \
+            '[.[] | select(.status == "SUCCESS")][0].meta.image' \
+            <<<"${frontend_deployments}")" = "${frontend_image}"
+
+      - name: Require development public smoke checks
+        env:
+          DEVELOPMENT_URL: https://dev-commerce.empowerment-forge.com
+        run: |
+          set -euo pipefail
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${DEVELOPMENT_URL}/")" = "200"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' \
+            "${DEVELOPMENT_URL}/client-side-route")" = "200"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' \
+            "${DEVELOPMENT_URL}/api/products/")" = "200"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' \
+            "${DEVELOPMENT_URL}/api/auth/me/")" = "401"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${DEVELOPMENT_URL}/api/")" = "404"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${DEVELOPMENT_URL}/admin/")" = "302"
+          curl --fail --silent --show-error \
+            "${DEVELOPMENT_URL}/static/admin/css/base.css" >/dev/null
+
+          for prefix in api admin static; do
+            headers="/tmp/development-${prefix}-headers"
+            status=$(curl --silent --show-error --output /dev/null \
+              --dump-header "${headers}" --write-out '%{http_code}' \
+              "${DEVELOPMENT_URL}/${prefix}")
+            test "${status}" = "308"
+            location=$(awk 'tolower($1) == "location:" {
+              sub(/\r$/, "", $2); print $2
+            }' "${headers}")
+            test "${location}" = "/${prefix}/"
+            case "${location}" in
+              http://*|*railway.internal*|*:8080*|*:8000*)
+                echo "Unsafe bare-prefix redirect: ${location}"
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Create immutable promotion record
+        env:
+          BACKEND_DIGEST: ${{ needs.publish-and-deploy-backend.outputs.digest }}
+          FRONTEND_DIGEST: ${{ needs.publish-and-deploy-frontend.outputs.digest }}
+          PROMOTION_RECORD_IMAGE: ghcr.io/empowerment-forge/commerce-architect-promotion-records
+        run: |
+          set -euo pipefail
+          jq --null-input \
+            --arg source_sha "${GITHUB_SHA}" \
+            --arg backend_image "${BACKEND_IMAGE}" \
+            --arg backend_digest "${BACKEND_DIGEST}" \
+            --arg frontend_image "${FRONTEND_IMAGE}" \
+            --arg frontend_digest "${FRONTEND_DIGEST}" '
+              {
+                schema: "commerce-architect-promotion/v1",
+                source_sha: $source_sha,
+                backend: {
+                  image: $backend_image,
+                  digest: $backend_digest
+                },
+                frontend: {
+                  image: $frontend_image,
+                  digest: $frontend_digest
+                },
+                development: {
+                  environment_id: "ce144653-b03a-4d0f-b306-3b0aabff8dda",
+                  backend_service_id: "93c267b7-e8cd-49c4-be9b-abe34aaa4373",
+                  frontend_service_id: "430aa8c4-88a5-4b7f-b433-9c0a3ff6e642",
+                  deployment_completed: true
+                }
+              }
+            ' >promotion.json
+
+          record_ref="${PROMOTION_RECORD_IMAGE}:${GITHUB_SHA}"
+          if record_digest=$(oras resolve "${record_ref}" 2>/dev/null); then
+            if ! [[ "${record_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Existing promotion record has an invalid manifest digest."
+              exit 1
+            fi
+            mkdir existing-record
+            oras pull "${PROMOTION_RECORD_IMAGE}@${record_digest}" \
+              --output existing-record
+            if ! cmp --silent promotion.json existing-record/promotion.json; then
+              echo "Refusing to overwrite a different promotion record for ${GITHUB_SHA}."
+              exit 1
+            fi
+            echo "The immutable promotion record already exists and matches."
+          else
+            oras push \
+              --artifact-type application/vnd.commerce-architect.promotion.v1 \
+              "${record_ref}" \
+              promotion.json:application/vnd.commerce-architect.promotion.v1+json
+            record_digest=$(oras resolve "${record_ref}")
+          fi
+
+          if ! [[ "${record_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unable to resolve the promotion record manifest digest."
+            exit 1
+          fi
+          echo "Recorded tested development artifacts for ${GITHUB_SHA} at ${record_digest}."

@@ -120,10 +120,28 @@ GitHub Actions validates the production frontend and backend images directly:
 4. Scan both images with Trivy for fixed HIGH/CRITICAL findings.
 5. Preserve deployment identity through immutable image digests.
 
-Pull requests targeting `develop`, pushes to `main`, and manual dispatches run
-validation. The maintained deployment automation may publish and deploy
-validated `develop` artifacts for the project maintainers, but that private
-hosting workflow is not part of the adopter-facing platform contract.
+Pull requests targeting `develop` and manual dispatches run validation. A push
+to `develop` also publishes and deploys the validated images for development
+acceptance. Merging `develop` to `main` is a promotion event: it must reuse the
+exact tested image digests and must not rebuild the application images.
+
+After both development deployments and public smoke checks succeed, CI writes a
+small promotion record as an OCI artifact in GHCR. Its tag is the full develop
+source SHA, and its payload records that SHA plus the immutable frontend and
+backend digests. CI refuses to replace a different record at the same tag.
+
+When a `develop` to `main` pull request opens, release validation resolves the
+record tag once and records both the develop SHA and the promotion record's own
+OCI manifest digest in a bot-authored pull-request comment. Subsequent changes
+to that pull request fail validation instead of silently selecting newer
+artifacts. After merge, production retrieves the record by its pinned manifest
+digest, verifies both application digests still exist, and deploys the backend
+before the frontend. The production workflow has non-canceling concurrency and
+does not contain a build step.
+
+The maintained Railway and GitHub implementation is operational automation for
+the project maintainers; the runtime contract in this document remains
+provider-neutral for adopters.
 
 Feature branches and pull requests must not receive deployment credentials.
 Registry and deployment credentials must be narrowly scoped, separated by
@@ -189,9 +207,11 @@ identity, routing, and relevant user journeys have been verified.
 
 ## Release and data boundaries
 
-No production promotion mechanism is defined by this document. Development,
-UAT, and production should use the same structural process with separate
-configuration, credentials, data, domains, and approval policy.
+The repository's release identity is the pinned tuple of develop source SHA,
+frontend digest, and backend digest. A later semantic version tag can be applied
+to the resulting main release commit without changing those artifact identities.
+Development, UAT, and production use separate configuration, credentials, data,
+domains, and approval policy.
 
 Commerce Architect is currently an early-stage platform. Backup/restore,
 rollback, monitoring, and incident-response maturity remain required before
