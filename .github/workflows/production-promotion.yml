@@ -241,7 +241,7 @@ jobs:
       - name: Deploy exact backend digest to Railway production
         env:
           BACKEND_DIGEST: ${{ steps.images.outputs.backend_digest }}
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
           SOURCE_SHA: ${{ steps.pin.outputs.source_sha }}
         run: |
           set -euo pipefail
@@ -296,7 +296,7 @@ jobs:
       - name: Deploy exact frontend digest to Railway production
         env:
           FRONTEND_DIGEST: ${{ steps.images.outputs.frontend_digest }}
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
           SOURCE_SHA: ${{ steps.pin.outputs.source_sha }}
         run: |
           set -euo pipefail
@@ -337,7 +337,7 @@ jobs:
         env:
           BACKEND_DIGEST: ${{ steps.images.outputs.backend_digest }}
           FRONTEND_DIGEST: ${{ steps.images.outputs.frontend_digest }}
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
         run: |
           set -euo pipefail
           backend_image="${BACKEND_IMAGE}@${BACKEND_DIGEST}"
