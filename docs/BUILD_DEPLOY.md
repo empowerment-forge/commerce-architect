@@ -131,13 +131,14 @@ source SHA, and its payload records that SHA plus the immutable frontend and
 backend digests. CI refuses to replace a different record at the same tag.
 
 When a `develop` to `main` pull request opens, release validation resolves the
-record tag once and records both the develop SHA and the promotion record's own
-OCI manifest digest in a bot-authored pull-request comment. Subsequent changes
-to that pull request fail validation instead of silently selecting newer
-artifacts. After merge, production retrieves the record by its pinned manifest
-digest, verifies both application digests still exist, and deploys the backend
-before the frontend. The production workflow has non-canceling concurrency and
-does not contain a build step.
+record tag and requires the reviewed pull-request body to pin both the develop
+SHA and the promotion record's own OCI manifest digest. Pull-request body edits
+retrigger validation. A later develop commit makes the pinned SHA differ from
+the PR head, so validation fails instead of silently selecting newer artifacts.
+After merge, production retrieves the record by its pinned manifest digest,
+verifies both application digests still exist, and deploys the backend before
+the frontend. The production workflow has non-canceling concurrency and does
+not contain a build step.
 
 The maintained Railway and GitHub implementation is operational automation for
 the project maintainers; the runtime contract in this document remains
