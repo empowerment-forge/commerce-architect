@@ -37,7 +37,6 @@ jobs:
   release-validation:
     if: >-
       github.event.action != 'closed' &&
-      github.event.pull_request.head.ref == 'develop' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
@@ -62,9 +61,14 @@ jobs:
         id: pin
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+          if [ "${PR_HEAD_REF}" != "develop" ]; then
+            echo "Non-release workflow PR; immutable artifact pin validation is not applicable."
+            exit 0
+          fi
           marker='<!-- commerce-production-pin:v1 -->'
           if [ "$(grep --fixed-strings --count "${marker}" <<<"${PR_BODY}")" -ne 1 ]; then
             echo "The release PR body must contain exactly one production artifact pin marker."
@@ -100,6 +104,7 @@ jobs:
           echo "record_digest=${record_digest}" >>"${GITHUB_OUTPUT}"
 
       - name: Validate pinned promotion record and images
+        if: github.event.pull_request.head.ref == 'develop'
         env:
           RECORD_DIGEST: ${{ steps.pin.outputs.record_digest }}
           SOURCE_SHA: ${{ steps.pin.outputs.source_sha }}
