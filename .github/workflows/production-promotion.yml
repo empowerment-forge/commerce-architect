@@ -10,6 +10,16 @@ on:
       - synchronize
       - edited
       - closed
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Tested develop source commit SHA
+        required: true
+        type: string
+      record_digest:
+        description: Immutable promotion record manifest digest
+        required: true
+        type: string
 
 env:
   BACKEND_IMAGE: ghcr.io/empowerment-forge/commerce-architect-backend
@@ -17,6 +27,7 @@ env:
   PROMOTION_RECORD_IMAGE: ghcr.io/empowerment-forge/commerce-architect-promotion-records
   RAILWAY_PROJECT_ID: 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433
   RAILWAY_PRODUCTION_ENVIRONMENT_ID: d00ad3c6-991e-4d1c-8f43-703703b12ad7
+  RAILWAY_PRODUCTION_ENVIRONMENT: production
   RAILWAY_PRODUCTION_BACKEND_SERVICE_ID: 76419cae-0853-48e1-bd70-a4ac019349f5
   RAILWAY_PRODUCTION_FRONTEND_SERVICE_ID: 35c5c4b3-db9f-4b5e-b7d5-1e7db9c6969f
   PRODUCTION_BACKEND_URL: https://backend-production-production-01dc.up.railway.app
@@ -121,11 +132,12 @@ jobs:
 
   production-promotion:
     if: >-
-      github.event.action == 'closed' &&
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'closed' &&
       github.event.pull_request.merged == true &&
       github.event.pull_request.base.ref == 'main' &&
       github.event.pull_request.head.ref == 'develop' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     environment: production
     concurrency:
@@ -152,20 +164,27 @@ jobs:
       - name: Load the immutable production artifact pin
         id: pin
         env:
-          MERGED_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGED_PR_HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
+          DISPATCH_SOURCE_SHA: ${{ inputs.source_sha }}
+          DISPATCH_RECORD_DIGEST: ${{ inputs.record_digest }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
-          marker='<!-- commerce-production-pin:v1 -->'
-          if [ "$(grep --fixed-strings --count "${marker}" <<<"${PR_BODY}")" -ne 1 ]; then
-            echo "Expected exactly one reviewed production artifact pin."
-            exit 1
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            source_sha="${DISPATCH_SOURCE_SHA}"
+            record_digest="${DISPATCH_RECORD_DIGEST}"
+          else
+            marker='<!-- commerce-production-pin:v1 -->'
+            if [ "$(grep --fixed-strings --count "${marker}" <<<"${PR_BODY}")" -ne 1 ]; then
+              echo "Expected exactly one reviewed production artifact pin."
+              exit 1
+            fi
+            source_sha=$(sed -nE \
+              's/^source_sha: ([0-9a-f]{40})$/\1/p' <<<"${PR_BODY}")
+            record_digest=$(sed -nE \
+              's/^record_digest: (sha256:[0-9a-f]{64})$/\1/p' \
+              <<<"${PR_BODY}")
           fi
-          source_sha=$(sed -nE \
-            's/^source_sha: ([0-9a-f]{40})$/\1/p' <<<"${PR_BODY}")
-          record_digest=$(sed -nE \
-            's/^record_digest: (sha256:[0-9a-f]{64})$/\1/p' \
-            <<<"${PR_BODY}")
           if ! [[ "${source_sha}" =~ ^[0-9a-f]{40}$ ]] ||
             ! [[ "${record_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             echo "The production artifact pin is malformed."
@@ -228,14 +247,14 @@ jobs:
             '{services: {($service): {source: {image: $image}}}}' \
           | npx --yes @railway/cli@5.49.6 environment edit \
               --project "${RAILWAY_PROJECT_ID}" \
-              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT}" \
               --message "Promote backend ${SOURCE_SHA}" \
               --json
 
           for _ in {1..60}; do
             deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
               --project "${RAILWAY_PROJECT_ID}" \
-              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT}" \
               --service "${RAILWAY_PRODUCTION_BACKEND_SERVICE_ID}" \
               --limit 10 --json)
             status=$(jq --raw-output --arg image "${expected_image}" \
@@ -283,14 +302,14 @@ jobs:
             '{services: {($service): {source: {image: $image}}}}' \
           | npx --yes @railway/cli@5.49.6 environment edit \
               --project "${RAILWAY_PROJECT_ID}" \
-              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT}" \
               --message "Promote frontend ${SOURCE_SHA}" \
               --json
 
           for _ in {1..60}; do
             deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
               --project "${RAILWAY_PROJECT_ID}" \
-              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT}" \
               --service "${RAILWAY_PRODUCTION_FRONTEND_SERVICE_ID}" \
               --limit 10 --json)
             status=$(jq --raw-output --arg image "${expected_image}" \
@@ -321,12 +340,12 @@ jobs:
 
           backend_deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
             --project "${RAILWAY_PROJECT_ID}" \
-            --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+            --environment "${RAILWAY_PRODUCTION_ENVIRONMENT}" \
             --service "${RAILWAY_PRODUCTION_BACKEND_SERVICE_ID}" \
             --limit 10 --json)
           frontend_deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
             --project "${RAILWAY_PROJECT_ID}" \
-            --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+            --environment "${RAILWAY_PRODUCTION_ENVIRONMENT}" \
             --service "${RAILWAY_PRODUCTION_FRONTEND_SERVICE_ID}" \
             --limit 10 --json)
           test "$(jq --raw-output \
