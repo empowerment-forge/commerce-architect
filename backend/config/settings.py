@@ -179,6 +179,29 @@ STOREFRONT_ORGANIZATION_ID = env_optional_positive_int(
     "STOREFRONT_ORGANIZATION_ID"
 )
 CATALOG_PORTABILITY_ENABLED = env_bool("CATALOG_PORTABILITY_ENABLED", False)
+MEDIA_STORAGE_BACKEND = os.environ.get("MEDIA_STORAGE_BACKEND", "disabled").strip().lower()
+MEDIA_PUBLIC_BASE_URL = os.environ.get("MEDIA_PUBLIC_BASE_URL", "").strip().rstrip("/")
+MEDIA_LOCAL_ROOT = os.environ.get("MEDIA_LOCAL_ROOT", "").strip()
+MEDIA_S3_ENDPOINT_URL = os.environ.get("MEDIA_S3_ENDPOINT_URL", "").strip()
+MEDIA_S3_BUCKET = os.environ.get("MEDIA_S3_BUCKET", "").strip()
+MEDIA_S3_REGION = os.environ.get("MEDIA_S3_REGION", "").strip()
+MEDIA_S3_ACCESS_KEY_ID = os.environ.get("MEDIA_S3_ACCESS_KEY_ID", "").strip()
+MEDIA_S3_SECRET_ACCESS_KEY = os.environ.get("MEDIA_S3_SECRET_ACCESS_KEY", "")
+MEDIA_S3_STORAGE_CLASS = os.environ.get("MEDIA_S3_STORAGE_CLASS", "STANDARD").strip()
+if MEDIA_STORAGE_BACKEND not in {"disabled", "local", "s3"}:
+    raise ImproperlyConfigured("MEDIA_STORAGE_BACKEND must be disabled, local, or s3.")
+if MEDIA_STORAGE_BACKEND != "disabled":
+    if not MEDIA_PUBLIC_BASE_URL:
+        raise ImproperlyConfigured("MEDIA_PUBLIC_BASE_URL is required when media is enabled.")
+    if IS_PRODUCTION and not MEDIA_PUBLIC_BASE_URL.startswith("https://"):
+        raise ImproperlyConfigured("Production media delivery requires HTTPS.")
+if MEDIA_STORAGE_BACKEND == "local" and IS_PRODUCTION:
+    raise ImproperlyConfigured("Local media storage is forbidden in production.")
+if MEDIA_STORAGE_BACKEND == "s3":
+    if not all((MEDIA_S3_ENDPOINT_URL, MEDIA_S3_BUCKET, MEDIA_S3_REGION, MEDIA_S3_ACCESS_KEY_ID, MEDIA_S3_SECRET_ACCESS_KEY)):
+        raise ImproperlyConfigured("S3 media requires explicit endpoint, bucket, region, and credentials.")
+    if MEDIA_S3_STORAGE_CLASS != "STANDARD":
+        raise ImproperlyConfigured("MEDIA_S3_STORAGE_CLASS must be STANDARD.")
 EMAIL_BACKEND_NAME = os.environ.get(
     "EMAIL_BACKEND",
     (

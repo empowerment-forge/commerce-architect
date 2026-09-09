@@ -9,7 +9,7 @@ import { createServer as createViteServer } from "vite";
 const configFile = fileURLToPath(new URL("./vite.config.ts", import.meta.url));
 
 describe("Vite Django proxies", () => {
-  it("forwards API, admin, and static paths to the configured backend", async () => {
+  it("forwards API, admin, static, and media paths to the configured backend", async () => {
     const requestedPaths: string[] = [];
     const backend = createHttpServer((request, response) => {
       requestedPaths.push(request.url ?? "");
@@ -32,7 +32,7 @@ describe("Vite Django proxies", () => {
     try {
       await vite.listen();
       const viteAddress = vite.httpServer?.address() as AddressInfo;
-      for (const path of ["/api/products/", "/admin/", "/static/admin/css/base.css"]) {
+      for (const path of ["/api/products/", "/admin/", "/static/admin/css/base.css", "/media/sha256/" + "a".repeat(64)]) {
         const response = await fetch(`http://127.0.0.1:${viteAddress.port}${path}`);
         expect(response.status).toBe(200);
         expect(response.headers.get("content-type")).toContain("application/json");
@@ -41,6 +41,7 @@ describe("Vite Django proxies", () => {
         "/api/products/",
         "/admin/",
         "/static/admin/css/base.css",
+        "/media/sha256/" + "a".repeat(64),
       ]);
     } finally {
       await vite.close();

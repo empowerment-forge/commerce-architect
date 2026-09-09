@@ -21,6 +21,8 @@ RUN COMMERCE_ENV=development \
         DJANGO_SECRET_KEY=collectstatic-build-only-not-a-runtime-secret \
         python manage.py collectstatic --noinput \
     && useradd --create-home --uid 10001 commerce \
+    && mkdir -p /var/lib/commerce/media \
+    && chown -R commerce:commerce /var/lib/commerce \
     && chown -R commerce:commerce /app
 
 USER commerce

@@ -18,6 +18,10 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import HttpResponse
 from health.views import health
+from django.conf import settings
+
+if settings.COMMERCE_ENV == "development" and settings.MEDIA_STORAGE_BACKEND == "local":
+    from media_storage.views import local_media
 
 def root_view(request):
     return HttpResponse("Empowerment Forge Commerce Platform")
@@ -29,3 +33,6 @@ urlpatterns = [
     path("api/auth/", include("accounts.urls")),
     path("api/", include("catalog.urls")),
 ]
+
+if settings.COMMERCE_ENV == "development" and settings.MEDIA_STORAGE_BACKEND == "local":
+    urlpatterns.append(path("media/sha256/<str:digest>", local_media, name="local-media"))
