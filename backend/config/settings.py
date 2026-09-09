@@ -50,6 +50,21 @@ def env_int(name, default):
     except ValueError as exc:
         raise ImproperlyConfigured(f"{name} must be an integer.") from exc
 
+
+def env_optional_positive_int(name):
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(
+            f"{name} must be a positive integer when set."
+        ) from exc
+    if parsed <= 0:
+        raise ImproperlyConfigured(f"{name} must be a positive integer when set.")
+    return parsed
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -158,6 +173,12 @@ AUTH_FRONTEND_BASE_URL = os.environ.get(
     "AUTH_FRONTEND_BASE_URL",
     "http://localhost:5173" if not IS_PRODUCTION else "",
 ).strip().rstrip("/")
+
+# Storefront scope is explicit by design. No default Organization is selected.
+STOREFRONT_ORGANIZATION_ID = env_optional_positive_int(
+    "STOREFRONT_ORGANIZATION_ID"
+)
+CATALOG_PORTABILITY_ENABLED = env_bool("CATALOG_PORTABILITY_ENABLED", False)
 EMAIL_BACKEND_NAME = os.environ.get(
     "EMAIL_BACKEND",
     (
@@ -272,6 +293,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'accounts',
     'catalog',
+    'organizations',
 ]
 
 STATICFILES_DIRS = [
