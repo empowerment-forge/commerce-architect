@@ -41,14 +41,10 @@ class Product(models.Model):
     organization = models.ForeignKey(
         Organization,
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name="products",
     )
     sku = models.CharField(
         max_length=64,
-        null=True,
-        blank=True,
         validators=[
             RegexValidator(
                 regex=SKU_PATTERN,
@@ -57,8 +53,6 @@ class Product(models.Model):
         ],
     )
     stock_quantity = models.PositiveIntegerField(
-        null=True,
-        blank=True,
     )
     portable_id = models.UUIDField(
         default=uuid.uuid4,
@@ -92,3 +86,23 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "sku"),
+                name="product_organization_sku_unique",
+            ),
+            models.UniqueConstraint(
+                fields=("organization", "portable_id"),
+                name="product_organization_portable_id_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(price__gte=0),
+                name="product_price_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(stock_quantity__gte=0),
+                name="product_stock_nonnegative",
+            ),
+        ]
