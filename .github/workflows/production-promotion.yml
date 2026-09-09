@@ -8,6 +8,7 @@ on:
       - opened
       - reopened
       - synchronize
+      - edited
       - closed
 
 env:
@@ -30,7 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
       packages: read
 
     steps:
@@ -47,57 +47,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pin or load the production artifact record
+      - name: Load the reviewed production artifact pin
         id: pin
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_ACTION: ${{ github.event.action }}
+          PR_BODY: ${{ github.event.pull_request.body }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           marker='<!-- commerce-production-pin:v1 -->'
-          comments=$(gh api --paginate --slurp \
-            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments")
-          pins=$(jq --arg marker "${marker}" \
-            '[.[][] | select(.user.login == "github-actions[bot]")
-              | select(.body | startswith($marker))]' \
-            <<<"${comments}")
-          pin_count=$(jq 'length' <<<"${pins}")
-
-          if [ "${pin_count}" -gt 1 ]; then
-            echo "More than one production artifact pin exists for this PR."
+          if [ "$(grep --fixed-strings --count "${marker}" <<<"${PR_BODY}")" -ne 1 ]; then
+            echo "The release PR body must contain exactly one production artifact pin marker."
             exit 1
           fi
-
-          if [ "${pin_count}" -eq 0 ]; then
-            if [ "${PR_ACTION}" = "synchronize" ]; then
-              echo "The production PR changed before its artifact pin existed. Close it and open a new develop-to-main PR."
-              exit 1
-            fi
-            source_sha="${PR_HEAD_SHA}"
-            record_digest=$(oras resolve \
-              "${PROMOTION_RECORD_IMAGE}:${source_sha}")
-            case "${record_digest}" in
-              sha256:????????????????????????????????????????????????????????????????) ;;
-              *) echo "Unable to resolve an immutable promotion record digest."; exit 1 ;;
-            esac
-            body=$(printf '%s\n%s\n%s\n%s\n' \
-              "${marker}" \
-              'Production artifacts are pinned for this pull request.' \
-              "source_sha: ${source_sha}" \
-              "record_digest: ${record_digest}")
-            gh api --method POST \
-              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-              --field body="${body}" >/dev/null
-          else
-            pin_body=$(jq --raw-output '.[0].body' <<<"${pins}")
-            source_sha=$(sed -nE \
-              's/^source_sha: ([0-9a-f]{40})$/\1/p' <<<"${pin_body}")
-            record_digest=$(sed -nE \
-              's/^record_digest: (sha256:[0-9a-f]{64})$/\1/p' \
-              <<<"${pin_body}")
-          fi
+          source_sha=$(sed -nE \
+            's/^source_sha: ([0-9a-f]{40})$/\1/p' <<<"${PR_BODY}")
+          record_digest=$(sed -nE \
+            's/^record_digest: (sha256:[0-9a-f]{64})$/\1/p' \
+            <<<"${PR_BODY}")
 
           if ! [[ "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "The pinned develop SHA is missing or malformed."
@@ -110,6 +76,12 @@ jobs:
           if [ "${source_sha}" != "${PR_HEAD_SHA}" ]; then
             echo "This production PR is pinned to ${source_sha}, but its head is now ${PR_HEAD_SHA}."
             echo "Close it and open a new develop-to-main PR to select newer artifacts."
+            exit 1
+          fi
+          resolved_digest=$(oras resolve \
+            "${PROMOTION_RECORD_IMAGE}:${source_sha}")
+          if [ "${resolved_digest}" != "${record_digest}" ]; then
+            echo "The release PR does not pin the current immutable record for its develop SHA."
             exit 1
           fi
 
@@ -161,7 +133,6 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
-      issues: read
       packages: read
 
     steps:
@@ -181,29 +152,20 @@ jobs:
       - name: Load the immutable production artifact pin
         id: pin
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGED_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
           marker='<!-- commerce-production-pin:v1 -->'
-          comments=$(gh api --paginate --slurp \
-            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments")
-          pins=$(jq --arg marker "${marker}" \
-            '[.[][] | select(.user.login == "github-actions[bot]")
-              | select(.body | startswith($marker))]' \
-            <<<"${comments}")
-          if [ "$(jq 'length' <<<"${pins}")" -ne 1 ]; then
-            echo "Expected exactly one trusted production artifact pin."
+          if [ "$(grep --fixed-strings --count "${marker}" <<<"${PR_BODY}")" -ne 1 ]; then
+            echo "Expected exactly one reviewed production artifact pin."
             exit 1
           fi
-
-          pin_body=$(jq --raw-output '.[0].body' <<<"${pins}")
           source_sha=$(sed -nE \
-            's/^source_sha: ([0-9a-f]{40})$/\1/p' <<<"${pin_body}")
+            's/^source_sha: ([0-9a-f]{40})$/\1/p' <<<"${PR_BODY}")
           record_digest=$(sed -nE \
             's/^record_digest: (sha256:[0-9a-f]{64})$/\1/p' \
-            <<<"${pin_body}")
+            <<<"${PR_BODY}")
           if ! [[ "${source_sha}" =~ ^[0-9a-f]{40}$ ]] ||
             ! [[ "${record_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             echo "The production artifact pin is malformed."
