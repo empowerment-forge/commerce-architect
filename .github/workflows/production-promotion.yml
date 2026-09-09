@@ -1,0 +1,414 @@
+name: Production promotion
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - closed
+
+env:
+  BACKEND_IMAGE: ghcr.io/empowerment-forge/commerce-architect-backend
+  FRONTEND_IMAGE: ghcr.io/empowerment-forge/commerce-architect-frontend
+  PROMOTION_RECORD_IMAGE: ghcr.io/empowerment-forge/commerce-architect-promotion-records
+  RAILWAY_PROJECT_ID: 3ee1b9eb-3197-4b93-9ddd-de9e3f09c433
+  RAILWAY_PRODUCTION_ENVIRONMENT_ID: d00ad3c6-991e-4d1c-8f43-703703b12ad7
+  RAILWAY_PRODUCTION_BACKEND_SERVICE_ID: 76419cae-0853-48e1-bd70-a4ac019349f5
+  RAILWAY_PRODUCTION_FRONTEND_SERVICE_ID: 35c5c4b3-db9f-4b5e-b7d5-1e7db9c6969f
+  PRODUCTION_BACKEND_URL: https://backend-production-production-01dc.up.railway.app
+  PRODUCTION_URL: https://commerce.empowerment-forge.com
+
+jobs:
+  release-validation:
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.ref == 'develop' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      packages: read
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pin or load the production artifact record
+        id: pin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          marker='<!-- commerce-production-pin:v1 -->'
+          comments=$(gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments")
+          pins=$(jq --arg marker "${marker}" \
+            '[.[][] | select(.user.login == "github-actions[bot]")
+              | select(.body | startswith($marker))]' \
+            <<<"${comments}")
+          pin_count=$(jq 'length' <<<"${pins}")
+
+          if [ "${pin_count}" -gt 1 ]; then
+            echo "More than one production artifact pin exists for this PR."
+            exit 1
+          fi
+
+          if [ "${pin_count}" -eq 0 ]; then
+            if [ "${PR_ACTION}" = "synchronize" ]; then
+              echo "The production PR changed before its artifact pin existed. Close it and open a new develop-to-main PR."
+              exit 1
+            fi
+            source_sha="${PR_HEAD_SHA}"
+            record_digest=$(oras resolve \
+              "${PROMOTION_RECORD_IMAGE}:${source_sha}")
+            case "${record_digest}" in
+              sha256:????????????????????????????????????????????????????????????????) ;;
+              *) echo "Unable to resolve an immutable promotion record digest."; exit 1 ;;
+            esac
+            body=$(printf '%s\n%s\n%s\n%s\n' \
+              "${marker}" \
+              'Production artifacts are pinned for this pull request.' \
+              "source_sha: ${source_sha}" \
+              "record_digest: ${record_digest}")
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --field body="${body}" >/dev/null
+          else
+            pin_body=$(jq --raw-output '.[0].body' <<<"${pins}")
+            source_sha=$(sed -nE \
+              's/^source_sha: ([0-9a-f]{40})$/\1/p' <<<"${pin_body}")
+            record_digest=$(sed -nE \
+              's/^record_digest: (sha256:[0-9a-f]{64})$/\1/p' \
+              <<<"${pin_body}")
+          fi
+
+          if ! [[ "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The pinned develop SHA is missing or malformed."
+            exit 1
+          fi
+          if ! [[ "${record_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "The pinned promotion record digest is missing or malformed."
+            exit 1
+          fi
+          if [ "${source_sha}" != "${PR_HEAD_SHA}" ]; then
+            echo "This production PR is pinned to ${source_sha}, but its head is now ${PR_HEAD_SHA}."
+            echo "Close it and open a new develop-to-main PR to select newer artifacts."
+            exit 1
+          fi
+
+          echo "source_sha=${source_sha}" >>"${GITHUB_OUTPUT}"
+          echo "record_digest=${record_digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Validate pinned promotion record and images
+        env:
+          RECORD_DIGEST: ${{ steps.pin.outputs.record_digest }}
+          SOURCE_SHA: ${{ steps.pin.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          mkdir promotion-record
+          oras pull \
+            "${PROMOTION_RECORD_IMAGE}@${RECORD_DIGEST}" \
+            --output promotion-record
+
+          record=promotion-record/promotion.json
+          jq --exit-status \
+            --arg source_sha "${SOURCE_SHA}" \
+            --arg backend_image "${BACKEND_IMAGE}" \
+            --arg frontend_image "${FRONTEND_IMAGE}" '
+              .schema == "commerce-architect-promotion/v1" and
+              .source_sha == $source_sha and
+              .backend.image == $backend_image and
+              .frontend.image == $frontend_image and
+              (.backend.digest | test("^sha256:[0-9a-f]{64}$")) and
+              (.frontend.digest | test("^sha256:[0-9a-f]{64}$"))
+            ' "${record}" >/dev/null
+
+          backend_digest=$(jq --raw-output '.backend.digest' "${record}")
+          frontend_digest=$(jq --raw-output '.frontend.digest' "${record}")
+          docker buildx imagetools inspect \
+            "${BACKEND_IMAGE}@${backend_digest}" >/dev/null
+          docker buildx imagetools inspect \
+            "${FRONTEND_IMAGE}@${frontend_digest}" >/dev/null
+
+  production-promotion:
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'develop' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: commerce-architect-production-promotion
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: read
+      packages: read
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load the immutable production artifact pin
+        id: pin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGED_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          marker='<!-- commerce-production-pin:v1 -->'
+          comments=$(gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments")
+          pins=$(jq --arg marker "${marker}" \
+            '[.[][] | select(.user.login == "github-actions[bot]")
+              | select(.body | startswith($marker))]' \
+            <<<"${comments}")
+          if [ "$(jq 'length' <<<"${pins}")" -ne 1 ]; then
+            echo "Expected exactly one trusted production artifact pin."
+            exit 1
+          fi
+
+          pin_body=$(jq --raw-output '.[0].body' <<<"${pins}")
+          source_sha=$(sed -nE \
+            's/^source_sha: ([0-9a-f]{40})$/\1/p' <<<"${pin_body}")
+          record_digest=$(sed -nE \
+            's/^record_digest: (sha256:[0-9a-f]{64})$/\1/p' \
+            <<<"${pin_body}")
+          if ! [[ "${source_sha}" =~ ^[0-9a-f]{40}$ ]] ||
+            ! [[ "${record_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "The production artifact pin is malformed."
+            exit 1
+          fi
+          if [ "${source_sha}" != "${MERGED_PR_HEAD_SHA}" ]; then
+            echo "Merged PR head does not match its pinned tested develop SHA."
+            exit 1
+          fi
+
+          echo "source_sha=${source_sha}" >>"${GITHUB_OUTPUT}"
+          echo "record_digest=${record_digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Resolve and verify exact tested image digests
+        id: images
+        env:
+          RECORD_DIGEST: ${{ steps.pin.outputs.record_digest }}
+          SOURCE_SHA: ${{ steps.pin.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          mkdir promotion-record
+          oras pull \
+            "${PROMOTION_RECORD_IMAGE}@${RECORD_DIGEST}" \
+            --output promotion-record
+          record=promotion-record/promotion.json
+
+          jq --exit-status \
+            --arg source_sha "${SOURCE_SHA}" \
+            --arg backend_image "${BACKEND_IMAGE}" \
+            --arg frontend_image "${FRONTEND_IMAGE}" '
+              .schema == "commerce-architect-promotion/v1" and
+              .source_sha == $source_sha and
+              .backend.image == $backend_image and
+              .frontend.image == $frontend_image and
+              (.backend.digest | test("^sha256:[0-9a-f]{64}$")) and
+              (.frontend.digest | test("^sha256:[0-9a-f]{64}$")) and
+              .development.deployment_completed == true
+            ' "${record}" >/dev/null
+
+          backend_digest=$(jq --raw-output '.backend.digest' "${record}")
+          frontend_digest=$(jq --raw-output '.frontend.digest' "${record}")
+          docker buildx imagetools inspect \
+            "${BACKEND_IMAGE}@${backend_digest}" >/dev/null
+          docker buildx imagetools inspect \
+            "${FRONTEND_IMAGE}@${frontend_digest}" >/dev/null
+          echo "backend_digest=${backend_digest}" >>"${GITHUB_OUTPUT}"
+          echo "frontend_digest=${frontend_digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Deploy exact backend digest to Railway production
+        env:
+          BACKEND_DIGEST: ${{ steps.images.outputs.backend_digest }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SOURCE_SHA: ${{ steps.pin.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          expected_image="${BACKEND_IMAGE}@${BACKEND_DIGEST}"
+          jq --null-input \
+            --arg image "${expected_image}" \
+            --arg service "${RAILWAY_PRODUCTION_BACKEND_SERVICE_ID}" \
+            '{services: {($service): {source: {image: $image}}}}' \
+          | npx --yes @railway/cli@5.49.6 environment edit \
+              --project "${RAILWAY_PROJECT_ID}" \
+              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+              --message "Promote backend ${SOURCE_SHA}" \
+              --json
+
+          for _ in {1..60}; do
+            deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
+              --project "${RAILWAY_PROJECT_ID}" \
+              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+              --service "${RAILWAY_PRODUCTION_BACKEND_SERVICE_ID}" \
+              --limit 10 --json)
+            status=$(jq --raw-output --arg image "${expected_image}" \
+              '[.[] | select(.meta.image == $image)][0].status // "NOT_FOUND"' \
+              <<<"${deployments}")
+            case "${status}" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|NEEDS_APPROVAL|SLEEPING|SKIPPED|REMOVED|REMOVING)
+                echo "Railway backend deployment reached terminal status: ${status}"
+                exit 1
+                ;;
+              NOT_FOUND|QUEUED|INITIALIZING|WAITING|BUILDING|DEPLOYING) sleep 10 ;;
+              *) echo "Unexpected Railway deployment status: ${status}"; exit 1 ;;
+            esac
+          done
+          echo "Railway backend deployment did not complete within 10 minutes."
+          exit 1
+
+      - name: Require production backend health
+        run: |
+          set -euo pipefail
+          for _ in {1..30}; do
+            if response=$(curl --fail --silent --show-error \
+              "${PRODUCTION_BACKEND_URL}/health/"); then
+              test "$(jq --raw-output '.status' <<<"${response}")" = "ok"
+              test "$(jq --raw-output '.database' <<<"${response}")" = "ok"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Production backend health check failed."
+          exit 1
+
+      - name: Deploy exact frontend digest to Railway production
+        env:
+          FRONTEND_DIGEST: ${{ steps.images.outputs.frontend_digest }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SOURCE_SHA: ${{ steps.pin.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          expected_image="${FRONTEND_IMAGE}@${FRONTEND_DIGEST}"
+          jq --null-input \
+            --arg image "${expected_image}" \
+            --arg service "${RAILWAY_PRODUCTION_FRONTEND_SERVICE_ID}" \
+            '{services: {($service): {source: {image: $image}}}}' \
+          | npx --yes @railway/cli@5.49.6 environment edit \
+              --project "${RAILWAY_PROJECT_ID}" \
+              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+              --message "Promote frontend ${SOURCE_SHA}" \
+              --json
+
+          for _ in {1..60}; do
+            deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
+              --project "${RAILWAY_PROJECT_ID}" \
+              --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+              --service "${RAILWAY_PRODUCTION_FRONTEND_SERVICE_ID}" \
+              --limit 10 --json)
+            status=$(jq --raw-output --arg image "${expected_image}" \
+              '[.[] | select(.meta.image == $image)][0].status // "NOT_FOUND"' \
+              <<<"${deployments}")
+            case "${status}" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|NEEDS_APPROVAL|SLEEPING|SKIPPED|REMOVED|REMOVING)
+                echo "Railway frontend deployment reached terminal status: ${status}"
+                exit 1
+                ;;
+              NOT_FOUND|QUEUED|INITIALIZING|WAITING|BUILDING|DEPLOYING) sleep 10 ;;
+              *) echo "Unexpected Railway deployment status: ${status}"; exit 1 ;;
+            esac
+          done
+          echo "Railway frontend deployment did not complete within 10 minutes."
+          exit 1
+
+      - name: Verify production routes and deployed identities
+        env:
+          BACKEND_DIGEST: ${{ steps.images.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ steps.images.outputs.frontend_digest }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          backend_image="${BACKEND_IMAGE}@${BACKEND_DIGEST}"
+          frontend_image="${FRONTEND_IMAGE}@${FRONTEND_DIGEST}"
+
+          backend_deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
+            --project "${RAILWAY_PROJECT_ID}" \
+            --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+            --service "${RAILWAY_PRODUCTION_BACKEND_SERVICE_ID}" \
+            --limit 10 --json)
+          frontend_deployments=$(npx --yes @railway/cli@5.49.6 deployment list \
+            --project "${RAILWAY_PROJECT_ID}" \
+            --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}" \
+            --service "${RAILWAY_PRODUCTION_FRONTEND_SERVICE_ID}" \
+            --limit 10 --json)
+          test "$(jq --raw-output \
+            '[.[] | select(.status == "SUCCESS")][0].meta.image' \
+            <<<"${backend_deployments}")" = "${backend_image}"
+          test "$(jq --raw-output \
+            '[.[] | select(.status == "SUCCESS")][0].meta.image' \
+            <<<"${frontend_deployments}")" = "${frontend_image}"
+
+          status=$(curl --silent --show-error --output /tmp/index.html \
+            --write-out '%{http_code}' "${PRODUCTION_URL}/")
+          test "${status}" = "200"
+          grep --fixed-strings '<div id="root"></div>' /tmp/index.html
+
+          status=$(curl --silent --show-error --output /tmp/spa.html \
+            --write-out '%{http_code}' "${PRODUCTION_URL}/client-side-route")
+          test "${status}" = "200"
+          grep --fixed-strings '<div id="root"></div>' /tmp/spa.html
+
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${PRODUCTION_URL}/api/products/")" = "200"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${PRODUCTION_URL}/api/auth/me/")" = "401"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${PRODUCTION_URL}/api/")" = "404"
+          test "$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' "${PRODUCTION_URL}/admin/")" = "302"
+          curl --fail --silent --show-error \
+            "${PRODUCTION_URL}/static/admin/css/base.css" >/dev/null
+
+          for prefix in api admin static; do
+            headers="/tmp/${prefix}-headers"
+            status=$(curl --silent --show-error --output /dev/null \
+              --dump-header "${headers}" --write-out '%{http_code}' \
+              "${PRODUCTION_URL}/${prefix}")
+            test "${status}" = "308"
+            location=$(awk 'tolower($1) == "location:" {
+              sub(/\r$/, "", $2); print $2
+            }' "${headers}")
+            test "${location}" = "/${prefix}/"
+            case "${location}" in
+              http://*|*railway.internal*|*:8080*|*:8000*)
+                echo "Unsafe bare-prefix redirect: ${location}"
+                exit 1
+                ;;
+            esac
+          done

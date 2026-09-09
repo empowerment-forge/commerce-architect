@@ -66,8 +66,11 @@ startup, database migrations, Django health, and deployment security settings.
 Trivy scans both production images for fixed HIGH/CRITICAL findings.
 
 Successful `develop` pushes publish and deploy validated images by immutable
-digest. Pull requests and `main` pushes validate without deployment. See
-[BUILD_DEPLOY.md](BUILD_DEPLOY.md) for the canonical trigger matrix.
+digest, require public development smoke checks, and create an immutable
+promotion record. Pull requests to `develop` validate without deployment.
+`develop` to `main` release pull requests validate their pinned promotion
+record; the merged release promotes those exact digests without rebuilding.
+See [BUILD_DEPLOY.md](BUILD_DEPLOY.md) for the canonical trigger matrix.
 
 ## Human and End-to-End Acceptance
 

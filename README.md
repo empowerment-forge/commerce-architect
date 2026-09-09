@@ -135,8 +135,11 @@ We follow a simplified GitFlow-inspired model.
 
 ## CI Trigger Policy
 
-CI runs when: - A Pull Request targets `develop` - `develop` is merged
-into `main` - Manually triggered via GitHub Actions
+CI validates pull requests targeting `develop` and manual runs. A push to
+`develop` validates, publishes, and deploys immutable images to development,
+then records the tested image digests. A reviewed `develop` to `main` pull
+request promotes those exact digests to production after merge; `main` does not
+rebuild the application images.
 
 We do **not** run CI on every push to feature branches.
 
