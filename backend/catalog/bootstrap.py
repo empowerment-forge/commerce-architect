@@ -8,10 +8,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from django.db import transaction
-
 from catalog.models import Product
 from catalog.portability.schema import MAX_STOCK_QUANTITY, SKU_PATTERN
+from catalog.services import catalog_write_lock
 from organizations.models import Organization
 
 
@@ -167,8 +166,7 @@ def apply_mapping(mapping: dict, organization_id: int, expected_fingerprint: str
     fingerprint = mapping_fingerprint(mapping)
     if expected_fingerprint != fingerprint:
         raise BootstrapValidationError(("mapping fingerprint does not match reviewed fingerprint",))
-    with transaction.atomic():
-        Organization.objects.select_for_update().get(pk=organization_id)
+    with catalog_write_lock(organization_id):
         locked_products = list(Product.objects.select_for_update().all())
         plan = validate_mapping(mapping, organization_id, products=locked_products)
         for product_pk, sku, stock_quantity in plan.assignments:

@@ -74,6 +74,18 @@ class Product(models.Model):
                 raise ValidationError(
                     {field: "This field is required for new Products." for field in missing}
                 )
+        elif self.pk:
+            existing = type(self).objects.filter(pk=self.pk).values(
+                "organization_id", "portable_id"
+            ).first()
+            if existing and existing["organization_id"] != self.organization_id:
+                raise ValidationError(
+                    {"organization": "Product ownership cannot be changed."}
+                )
+            if existing and existing["portable_id"] != self.portable_id:
+                raise ValidationError(
+                    {"portable_id": "Product portable identity cannot be changed."}
+                )
         if self.portable_id is not None:
             validate_portable_uuid4(self.portable_id)
         if self.stock_quantity is not None:
@@ -82,7 +94,10 @@ class Product(models.Model):
     def save(self, *args, **kwargs):
         self.price = Decimal(str(self.price))
         self.full_clean()
-        super().save(*args, **kwargs)
+        from catalog.services import catalog_write_lock
+
+        with catalog_write_lock(self.organization_id):
+            super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -140,13 +155,16 @@ class ProductImage(models.Model):
         # The old primary must be cleared in the same transaction before the
         # conditional unique constraint can validate this new primary.
         self.full_clean(validate_constraints=False)
-        with transaction.atomic():
-            if self.is_primary:
-                type(self).objects.filter(
-                    product_id=self.product_id,
-                    is_primary=True,
-                ).exclude(pk=self.pk).update(is_primary=False)
-            super().save(*args, **kwargs)
+        from catalog.services import catalog_write_lock
+
+        with catalog_write_lock(self.product.organization_id):
+            with transaction.atomic():
+                if self.is_primary:
+                    type(self).objects.filter(
+                        product_id=self.product_id,
+                        is_primary=True,
+                    ).exclude(pk=self.pk).update(is_primary=False)
+                super().save(*args, **kwargs)
 
     class Meta:
         ordering = ("sort_order", "portable_id")

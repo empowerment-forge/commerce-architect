@@ -723,7 +723,8 @@ def test_products_endpoint_is_public_without_jwt(client):
         stock_quantity=0,
     )
 
-    response = client.get("/api/products/")
+    with override_settings(STOREFRONT_ORGANIZATION_ID=organization.pk):
+        response = client.get("/api/products/")
 
     assert response.status_code == 200
 

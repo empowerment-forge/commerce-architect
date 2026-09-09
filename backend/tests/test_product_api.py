@@ -1,4 +1,5 @@
 import pytest
+from django.test import override_settings
 
 from catalog.models import Product
 from organizations.models import Organization
@@ -18,7 +19,8 @@ def test_product_list_api_returns_active_product_without_auth(client):
         stock_quantity=0,
     )
 
-    response = client.get("/api/products/")
+    with override_settings(STOREFRONT_ORGANIZATION_ID=organization.pk):
+        response = client.get("/api/products/")
 
     assert response.status_code == 200
     data = response.json()
