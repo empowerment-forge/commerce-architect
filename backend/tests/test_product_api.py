@@ -1,16 +1,21 @@
 import pytest
 
 from catalog.models import Product
+from organizations.models import Organization
 
 
 @pytest.mark.django_db
 def test_product_list_api_returns_active_product_without_auth(client):
+    organization = Organization.objects.create(name="API Organization")
     Product.objects.create(
         name="API Product",
         description="API product description",
         product_type="physical",
         price="29.99",
         is_active=True,
+        organization=organization,
+        sku="API-001",
+        stock_quantity=0,
     )
 
     response = client.get("/api/products/")
