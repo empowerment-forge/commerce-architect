@@ -17,7 +17,12 @@ def test_disabled_media_has_no_fallback():
 
 
 def test_production_rejects_local_media():
-    with override_settings(MEDIA_STORAGE_BACKEND="local", MEDIA_PUBLIC_BASE_URL="https://media.example", MEDIA_LOCAL_ROOT="/var/lib/media", IS_PRODUCTION=True):
+    with override_settings(
+        MEDIA_STORAGE_BACKEND="local",
+        MEDIA_PUBLIC_BASE_URL="https://media.example",
+        MEDIA_LOCAL_ROOT="/var/lib/media",
+        IS_PRODUCTION=True,
+    ):
         with pytest.raises(ImproperlyConfigured):
             validate_media_settings()
 
@@ -27,8 +32,10 @@ def development_media_urlconf(settings):
     import config.urls
 
     original_environment = settings.COMMERCE_ENV
+    original_is_production = settings.IS_PRODUCTION
     original_backend = settings.MEDIA_STORAGE_BACKEND
     settings.COMMERCE_ENV = "development"
+    settings.IS_PRODUCTION = False
     settings.MEDIA_STORAGE_BACKEND = "local"
     importlib.reload(config.urls)
     clear_url_caches()
@@ -36,6 +43,7 @@ def development_media_urlconf(settings):
         yield
     finally:
         settings.COMMERCE_ENV = original_environment
+        settings.IS_PRODUCTION = original_is_production
         settings.MEDIA_STORAGE_BACKEND = original_backend
         importlib.reload(config.urls)
         clear_url_caches()
