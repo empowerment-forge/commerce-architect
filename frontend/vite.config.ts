@@ -22,6 +22,7 @@ export default defineConfig({
       '/api': djangoProxy,
       '/admin': djangoProxy,
       '/static': djangoProxy,
+      '/media': djangoProxy,
     },
   },
 })

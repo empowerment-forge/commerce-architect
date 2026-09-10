@@ -19,6 +19,7 @@ from accounts.services import (
 from django.core.cache import cache
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from catalog.models import Product
+from organizations.models import Organization
 
 
 def registration_payload(**overrides):
@@ -710,15 +711,20 @@ def test_email_change_delivery_failure_keeps_new_address_unverified(client):
 
 @pytest.mark.django_db
 def test_products_endpoint_is_public_without_jwt(client):
+    organization = Organization.objects.create(name="Public Organization")
     Product.objects.create(
         name="Public Product",
         description="Visible without auth",
         product_type="physical",
         price="99.99",
         is_active=True,
+        organization=organization,
+        sku="PUBLIC-001",
+        stock_quantity=0,
     )
 
-    response = client.get("/api/products/")
+    with override_settings(STOREFRONT_ORGANIZATION_ID=organization.pk):
+        response = client.get("/api/products/")
 
     assert response.status_code == 200
 

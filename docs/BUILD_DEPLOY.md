@@ -83,6 +83,23 @@ Secret values belong in the hosting platform's secret store or another approved
 secret manager. Do not bake them into images, commit them, print them in logs, or
 copy rendered values into documentation.
 
+### Catalog media
+
+Hosted backends that enable catalog media set `MEDIA_STORAGE_BACKEND=s3` and
+provide environment-specific values for `MEDIA_S3_ENDPOINT_URL`,
+`MEDIA_S3_BUCKET`, `MEDIA_S3_REGION`, `MEDIA_S3_ACCESS_KEY_ID`,
+`MEDIA_S3_SECRET_ACCESS_KEY`, `MEDIA_S3_STORAGE_CLASS`, and
+`MEDIA_PUBLIC_BASE_URL`. Credentials are backend-only, bucket-scoped object
+credentials; frontend builds and pull-request jobs receive none of them.
+
+The object store and public delivery layer must preserve immutable
+`sha256/<digest>` objects and their canonical content type, inline disposition,
+and `public, max-age=31536000, immutable` cache policy. Public delivery requires
+HTTPS with minimum TLS 1.2, `X-Content-Type-Options: nosniff`, explicit caching
+of successful extension-free objects, no negative caching, no content-changing
+transformation, no object listing, and no public mutation. Development and
+production use distinct buckets, credentials, and public origins.
+
 ## Provisioning requirements
 
 A new environment must provide:
@@ -124,6 +141,15 @@ Pull requests targeting `develop` and manual dispatches run validation. A push
 to `develop` also publishes and deploys the validated images for development
 acceptance. Merging `develop` to `main` is a promotion event: it must reuse the
 exact tested image digests and must not rebuild the application images.
+
+An explicitly selected feature-branch manual dispatch may publish a backend
+image only after the same exact-image validation and security scan succeeds.
+The workflow requires the caller to pin the full feature commit SHA and emits an
+immutable digest under a feature-validation tag. It receives registry
+publication permission but no hosting credential and performs no deployment.
+An authorized operator may deploy that exact digest to hosted development for a
+feature-specific live acceptance test. This path cannot target production and
+does not replace the canonical `develop` promotion record.
 
 After both development deployments and public smoke checks succeed, CI writes a
 small promotion record as an OCI artifact in GHCR. Its tag is the full develop
@@ -179,6 +205,13 @@ From an authorized client, verify:
 | `GET /admin/` | redirect to login |
 | representative `/static/admin/...` asset | 200 |
 | backend `GET /health/` | 200 with database status `ok` |
+
+When catalog media is enabled, also verify authenticated origin readback and
+public GET/HEAD of a harmless valid image, exact bytes and MIME, immutable
+headers, `nosniff`, successful-object cache reuse, uncached 404 responses,
+nonlisting root behavior, and rejection of public PUT/POST/DELETE. Retain the
+known smoke object as part of the immutable corpus; do not use an existing
+catalog object for destructive guard probes.
 
 Also verify that bare `/api`, `/admin`, and `/static` redirects remain relative,
 that PostgreSQL has persistent private storage, and that running services match

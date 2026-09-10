@@ -29,6 +29,12 @@ for live source edits. At startup, `npm ci` synchronizes that dependency volume
 with the checked-in `frontend/package-lock.json`; host `node_modules` does not
 replace the container dependencies.
 
+The named volume `catalog_media` stores verified local catalog image bytes at
+`/var/lib/commerce/media`. The backend runs with `MEDIA_STORAGE_BACKEND=local`
+and Vite proxies the development-only `/media/sha256/<digest>` GET/HEAD route.
+The route does not list files or accept writes and is not registered in
+production mode. Ordinary stop/down/recreate operations preserve this volume.
+
 The Django image is built from `./backend`, and that directory is bind-mounted
 at `/app` in the `web` container. The React/Vite image and bind mount continue to
 use `./frontend`. Compose orchestration remains in `docker-compose.yml` at the
@@ -438,7 +444,7 @@ docker compose down
 ```
 
 Normal shutdown should use `stop` or `down` without `-v`. Both preserve the
-PostgreSQL data volume and frontend dependency volume.
+PostgreSQL data volume, local catalog media, and frontend dependency volume.
 
 `postgres_data` is a Compose-managed named volume, not a fixed repository or
 host filesystem path. Its physical location depends on the container runtime
@@ -452,9 +458,9 @@ rather than depending on an underlying host path.
 
 **Warning:** `down -v` stops and removes the containers and network **and deletes
 the project's named volumes**. This destroys the PostgreSQL development data in
-`postgres_data` as well as the replaceable frontend dependency volume. It is not
-a normal shutdown command. Use it only when a complete local data reset is
-intentional.
+`postgres_data`, verified local catalog media in `catalog_media`, and the
+replaceable frontend dependency volume. It is not a normal shutdown command.
+Use it only when a complete local data reset is intentional.
 
 With Podman Compose:
 
@@ -485,6 +491,8 @@ After resetting the volume, apply migrations again before using the application.
     Native host Vite development still defaults to `http://localhost:8000` when
     that variable is unset.
 -   PostgreSQL listens on port `5432` and persists data in `postgres_data`.
+-   Verified local catalog media persists in `catalog_media`; the configured
+    public base URL is `http://localhost:5173/media`.
 -   `DATABASE_HOST=db` is correct inside the Compose network; it should not be
     replaced with `localhost` in the container configuration.
 -   Rebuild the Django image when `backend/Dockerfile` or Python dependency
