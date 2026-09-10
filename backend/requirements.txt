@@ -7,24 +7,24 @@
 asgiref==3.12.1
     # via django
 boto3==1.43.91
-    # via -r backend/requirements.in
+    # via -r requirements.in
 botocore==1.43.91
     # via
     #   boto3
     #   s3transfer
-django==6.1
+django==6.1.1
     # via
-    #   -r backend/requirements.in
+    #   -r requirements.in
     #   djangorestframework
     #   djangorestframework-simplejwt
 djangorestframework==3.18.0
     # via
-    #   -r backend/requirements.in
+    #   -r requirements.in
     #   djangorestframework-simplejwt
 djangorestframework-simplejwt==5.5.1
-    # via -r backend/requirements.in
-gunicorn==26.0.0
-    # via -r backend/requirements.in
+    # via -r requirements.in
+gunicorn==26.2.0
+    # via -r requirements.in
 iniconfig==2.3.0
     # via pytest
 jmespath==1.1.0
@@ -32,25 +32,23 @@ jmespath==1.1.0
     #   boto3
     #   botocore
 packaging==26.3
-    # via
-    #   gunicorn
-    #   pytest
+    # via pytest
 pillow==12.3.0
-    # via -r backend/requirements.in
+    # via -r requirements.in
 pluggy==1.6.0
     # via pytest
 psycopg2-binary==2.9.12
-    # via -r backend/requirements.in
+    # via -r requirements.in
 pygments==2.20.0
     # via pytest
 pyjwt==2.13.0
     # via djangorestframework-simplejwt
 pytest==9.1.1
     # via
-    #   -r backend/requirements.in
+    #   -r requirements.in
     #   pytest-django
 pytest-django==4.14.0
-    # via -r backend/requirements.in
+    # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via botocore
 s3transfer==0.19.2
@@ -62,4 +60,4 @@ sqlparse==0.6.0
 urllib3==2.7.0
     # via botocore
 whitenoise==6.12.0
-    # via -r backend/requirements.in
+    # via -r requirements.in
