@@ -5,7 +5,7 @@ djangorestframework-simplejwt
 gunicorn
 psycopg2-binary
 whitenoise>=6.12,<7
-Pillow>=11.3,<12
+Pillow>=12.3,<13
 boto3>=1.40,<2
 
 # Test tooling (the production image is also the CI/test image)
