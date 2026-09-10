@@ -5,8 +5,10 @@ It uses PostgreSQL for application state and keeps authentication separate from
 commerce domains.
 
 The main apps are `accounts` for authentication, `catalog` for product-domain
-behavior, and `health` for database-aware readiness. Project configuration lives
-in `config`.
+behavior, and `health` for database-aware readiness. `media_storage` provides
+provider-neutral immutable media storage adapters and delivery URL generation;
+catalog models store only validated `sha256/<digest>` keys. Project
+configuration lives in `config`.
 
 ## Local commands
 
@@ -25,6 +27,12 @@ workflow.
 Django migrations live within each app's `migrations/` directory. Migration
 files are reviewed schema changes; they do not seed application data or create
 privileged users.
+
+Local Compose configures persistent filesystem media and exposes only the
+development GET/HEAD route through Vite. Hosted backends configure the
+S3-compatible adapter entirely through `MEDIA_*` runtime settings. Storage
+credentials remain backend-only and must never be committed, logged, rendered
+to frontend code, or copied into documentation.
 
 The API uses serializers as its transport boundary and keeps views thin;
 business rules belong in models or domain services. PostgreSQL schema changes
