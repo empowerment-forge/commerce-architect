@@ -44,7 +44,7 @@ class ProductImageAdmin(admin.ModelAdmin):
     list_display = ("product", "portable_id", "sort_order", "is_primary")
     list_filter = ("is_primary",)
     search_fields = ("storage_key", "alt_text", "product__name")
-    readonly_fields = ("portable_id", "created_at", "updated_at")
+    readonly_fields = ("portable_id", "storage_key", "created_at", "updated_at")
     actions = ()
 
     def get_queryset(self, request):
@@ -83,7 +83,7 @@ class ProductImageAdmin(admin.ModelAdmin):
         return self._is_active_superuser(request)
 
     def has_add_permission(self, request):
-        return self._is_active_superuser(request)
+        return False
 
     def has_change_permission(self, request, obj=None):
         return self._is_active_superuser(request)

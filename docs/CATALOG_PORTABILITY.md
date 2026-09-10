@@ -111,3 +111,29 @@ The fixture directory contains explicit expected outcomes used by
 The schema module also rejects duplicate JSON object keys and non-standard
 JSON constants such as `NaN`. Archive structure, byte hashes, image decoding,
 and transport behavior are deliberately deferred to later packets.
+
+## Verified immutable media boundary
+
+Catalog image handling preserves the original verified JPEG, PNG, or WebP
+bytes under the provider-neutral key `sha256/<lowercase-sha256>`. Verification
+enforces the v1 byte, dimension, and decoded-pixel limits, derives media type
+from decoding, forces complete pixel loading, and completes for every package
+image before any durable write begins.
+
+The storage boundary exposes only conditional create-if-absent and verified
+read operations. A successful write or reuse requires authenticated readback of
+the exact bytes and required metadata. Existing content is never overwritten,
+renamed, or deleted to resolve a conflict. `ProductImage.storage_key` stores
+only the provider-neutral key; provider URLs, bucket names, credentials, SDK
+responses, and signed URLs do not enter catalog models or package data.
+
+Local development uses persistent filesystem media with cross-process locking
+and a development-only GET/HEAD route. Hosted deployments use an explicitly
+configured S3-compatible adapter and public delivery origin. The hosted media
+contract requires isolated environment credentials and buckets, immutable
+retention protection for `sha256/`, HTTPS, canonical response metadata,
+`X-Content-Type-Options: nosniff`, successful-object caching without negative
+caching, and read-only public delivery.
+
+This boundary does not add import/export services, a native upload API or UI,
+image transformations, garbage collection, or storefront image presentation.

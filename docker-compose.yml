@@ -17,8 +17,6 @@ services:
     build: ./backend
     container_name: commerce_web
     command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - ./backend:/app
     ports:
       - "8000:8000"
     depends_on:
@@ -49,6 +47,12 @@ services:
       DATABASE_USER: ${POSTGRES_USER:-commerce}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-commercepass}
       DATABASE_PORT: "5432"
+      MEDIA_STORAGE_BACKEND: local
+      MEDIA_LOCAL_ROOT: /var/lib/commerce/media
+      MEDIA_PUBLIC_BASE_URL: http://localhost:5173/media
+    volumes:
+      - ./backend:/app
+      - catalog_media:/var/lib/commerce/media
 
   frontend:
     build:
@@ -69,3 +73,4 @@ services:
 volumes:
   postgres_data:
   frontend_node_modules:
+  catalog_media:
