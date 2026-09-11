@@ -166,6 +166,8 @@ def _apply_products(package, plan, organization_id):
 
 def _apply_images(package, products, stored_by_path):
     incoming_by_product = {}
+    for row in package.catalog["products"]:
+        incoming_by_product.setdefault(row["portable_id"], [])
     for row in package.catalog["product_images"]:
         incoming_by_product.setdefault(row["product_portable_id"], []).append(row)
     for product_id in sorted(incoming_by_product):
