@@ -107,6 +107,39 @@ def test_validate_is_mutation_free_and_import_requires_confirmations(tmp_path, c
 
 
 @pytest.mark.django_db
+def test_invalid_validation_plan_has_nonzero_exit_and_bounded_result(tmp_path, capsys, portability_enabled):
+    organization = Organization.objects.create(name="Command Invalid")
+    first = Product.objects.create(
+        organization=organization,
+        name="FIRST",
+        description="",
+        product_type="physical",
+        price="1.00",
+        sku="FIRST",
+        stock_quantity=0,
+    )
+    Product.objects.create(
+        organization=organization,
+        name="SECOND",
+        description="",
+        product_type="physical",
+        price="2.00",
+        sku="TAKEN",
+        stock_quantity=0,
+    )
+    package = package_for([product_row(str(first.portable_id), "TAKEN")])
+    path = tmp_path / "invalid.zip"
+    path.write_bytes(package)
+    with pytest.raises(CommandError) as error:
+        call_command("catalog_validate", organization=organization.pk, input=str(path), mode="merge")
+    output = json.loads(capsys.readouterr().out)
+    assert error.value.returncode == 2
+    assert output["status"] == "invalid"
+    assert output["plan"]["actions_truncated"] is False
+    assert output["plan"]["total_action_count"] == 0
+
+
+@pytest.mark.django_db
 def test_import_delegates_and_exact_retry_returns_same_receipt(tmp_path, capsys, portability_enabled):
     organization = Organization.objects.create(name="Command Apply")
     package = package_for([product_row("00000000-0000-4000-8000-000000000102", "APPLY")])
@@ -191,6 +224,10 @@ def test_operation_status_found_and_not_recorded_are_non_failure_results(capsys,
         ),
         result_counts={"deactivations": 0},
     )
+    call_command("catalog_operation_status", organization=organization.pk, operation_id=str(receipt.operation_id))
+    assert json.loads(capsys.readouterr().out)["receipt"]["status"] == "successful"
+    organization.status = Organization.STATUS_INACTIVE
+    organization.save(update_fields={"status", "updated_at"})
     call_command("catalog_operation_status", organization=organization.pk, operation_id=str(receipt.operation_id))
     assert json.loads(capsys.readouterr().out)["receipt"]["status"] == "successful"
 

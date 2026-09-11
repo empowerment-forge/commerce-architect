@@ -2,7 +2,14 @@ from django.core.management.base import BaseCommand
 
 from catalog.portability.planner import plan_catalog_import
 
-from ._catalog_operator import ensure_enabled, read_bounded_input, run_command, write_json
+from ._catalog_operator import (
+    bounded_plan_payload,
+    ensure_enabled,
+    read_bounded_input,
+    run_command,
+    write_json,
+    CatalogCommandError,
+)
 
 
 class Command(BaseCommand):
@@ -25,4 +32,7 @@ class Command(BaseCommand):
                 inventory_policy=options["inventory"],
             )
         )
-        write_json(self, {"status": "valid" if plan.valid else "invalid", "plan": plan.as_dict()})
+        payload = {"status": "valid" if plan.valid else "invalid", "plan": bounded_plan_payload(plan)}
+        write_json(self, payload)
+        if not plan.valid:
+            raise CatalogCommandError("catalog validation failed", returncode=2)

@@ -3,10 +3,10 @@ import uuid
 from django.core.management.base import BaseCommand
 
 from catalog.models import CatalogOperationReceipt
-from catalog.services import get_active_organization
 
 from ._catalog_operator import (
     ensure_enabled,
+    existing_organization,
     parse_operation_id,
     receipt_payload,
     run_command,
@@ -26,7 +26,7 @@ class Command(BaseCommand):
         operation_id = parse_operation_id(options["operation_id"])
 
         def operation():
-            organization = get_active_organization(options["organization"])
+            organization = existing_organization(options["organization"])
             receipt = CatalogOperationReceipt.objects.filter(
                 operation_id=operation_id,
                 organization_id=organization.pk,

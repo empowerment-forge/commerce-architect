@@ -14,6 +14,7 @@ from catalog.models import CatalogOperationReceipt
 from catalog.portability.errors import CatalogPackageError
 from catalog.portability.schema import ErrorCode, ZIP_FILE_LIMIT_BYTES
 from catalog.services import CatalogBusyError, CatalogScopeError
+from organizations.models import Organization
 
 
 class CatalogCommandError(CommandError):
@@ -77,6 +78,24 @@ def receipt_payload(receipt: CatalogOperationReceipt) -> dict[str, Any]:
         "result_counts": receipt.result_counts,
         "completed_at": receipt.completed_at.isoformat(),
     }
+
+
+def existing_organization(organization_id: int) -> Organization:
+    if isinstance(organization_id, bool) or not isinstance(organization_id, int) or organization_id <= 0:
+        raise CatalogCommandError("a positive Organization ID is required", returncode=2)
+    try:
+        return Organization.objects.get(pk=organization_id)
+    except Organization.DoesNotExist as exc:
+        raise CatalogCommandError("Organization does not exist", returncode=2) from exc
+
+
+def bounded_plan_payload(plan, *, max_actions: int = 100) -> dict[str, Any]:
+    payload = plan.as_dict()
+    actions = payload["actions"]
+    payload["total_action_count"] = len(actions)
+    payload["actions"] = actions[:max_actions]
+    payload["actions_truncated"] = len(actions) > max_actions
+    return payload
 
 
 def command_error_for(exc: Exception) -> CatalogCommandError:
