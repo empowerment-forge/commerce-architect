@@ -6,7 +6,7 @@ import hashlib
 import uuid
 from typing import Any
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 
 from catalog.models import CatalogOperationReceipt
 from catalog.portability.codec import canonical_json_bytes
@@ -89,10 +89,24 @@ def create_operation_receipt(
             result_counts=result_counts or {},
         )
     except IntegrityError:
+        # An enclosing atomic block is broken after the insert error.  Only an
+        # autocommit caller may resolve here; T12 resolves after full rollback.
+        if not transaction.get_autocommit():
+            raise
         existing = CatalogOperationReceipt.objects.filter(operation_id=operation_id).first()
         if existing is not None and existing.input_fingerprint == input_fingerprint:
             return existing
         raise _conflict(operation_id)
+
+
+def resolve_operation_receipt_after_rollback(
+    operation_id: uuid.UUID,
+    *,
+    input_fingerprint: str,
+) -> CatalogOperationReceipt | None:
+    """Resolve a receipt only after the failed mutation transaction is gone."""
+    existing = find_operation_receipt(operation_id, input_fingerprint=input_fingerprint)
+    return existing
 
 
 def get_or_create_operation_receipt(

@@ -107,7 +107,7 @@ class CatalogPlan:
 class _TargetSnapshot:
     products: tuple[dict[str, Any], ...]
     images: tuple[dict[str, Any], ...]
-    image_storage_keys: tuple[tuple[str, str], ...]
+    image_storage_keys: tuple[tuple[str, str, str], ...]
     digest: str
 
 
@@ -136,53 +136,95 @@ def _product_snapshot(product: Product) -> dict[str, Any]:
     }
 
 
+def _capture_target_rows_locked(
+    organization_id: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[tuple[str, str, str]]]:
+    """Capture rows while the caller owns the Organization lock."""
+    products = list(
+        Product.objects.filter(organization_id=organization_id).order_by("portable_id")
+    )
+    for product in products:
+        if product.product_type != "physical":
+            raise CatalogPackageError(
+                ErrorCode.UNSUPPORTED_SCHEMA,
+                "target contains an unsupported service Product",
+                path=f"products[{product.portable_id}].product_type",
+            )
+    product_ids = {product.pk: str(product.portable_id) for product in products}
+    images = list(
+        ProductImage.objects.filter(product__organization_id=organization_id)
+        .select_related("product")
+        .order_by("product__portable_id", "sort_order", "portable_id")
+    )
+    product_rows = [_product_snapshot(product) for product in products]
+    image_rows = []
+    storage_keys = []
+    for image in images:
+        product_portable_id = product_ids.get(image.product_id)
+        if product_portable_id is None:
+            raise CatalogPackageError(
+                ErrorCode.UNSUPPORTED_SCHEMA,
+                "target ProductImage is outside the selected Organization",
+            )
+        image_rows.append(
+            {
+                "portable_id": str(image.portable_id),
+                "product_portable_id": product_portable_id,
+                "alt_text": image.alt_text,
+                "sort_order": image.sort_order,
+                "is_primary": image.is_primary,
+                "storage_key": image.storage_key,
+            }
+        )
+        storage_keys.append((product_portable_id, str(image.portable_id), image.storage_key))
+    return product_rows, image_rows, storage_keys
+
+
 def _capture_target_rows(
     organization_id: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[tuple[str, str]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[tuple[str, str, str]]]:
     with catalog_write_lock(organization_id) as organization:
         if organization.status != Organization.STATUS_ACTIVE:
             raise CatalogPackageError(
                 ErrorCode.OPERATION_NOT_ALLOWED,
                 "planning requires an active Organization",
             )
-        products = list(
-            Product.objects.filter(organization_id=organization_id).order_by("portable_id")
-        )
-        for product in products:
-            if product.product_type != "physical":
-                raise CatalogPackageError(
-                    ErrorCode.UNSUPPORTED_SCHEMA,
-                    "target contains an unsupported service Product",
-                    path=f"products[{product.portable_id}].product_type",
-                )
-        product_ids = {product.pk: str(product.portable_id) for product in products}
-        images = list(
-            ProductImage.objects.filter(product__organization_id=organization_id)
-            .select_related("product")
-            .order_by("product__portable_id", "sort_order", "portable_id")
-        )
-        product_rows = [_product_snapshot(product) for product in products]
-        image_rows = []
-        storage_keys = []
-        for image in images:
-            product_portable_id = product_ids.get(image.product_id)
-            if product_portable_id is None:
-                raise CatalogPackageError(
-                    ErrorCode.UNSUPPORTED_SCHEMA,
-                    "target ProductImage is outside the selected Organization",
-                )
-            image_rows.append(
-                {
-                    "portable_id": str(image.portable_id),
-                    "product_portable_id": product_portable_id,
-                    "alt_text": image.alt_text,
-                    "sort_order": image.sort_order,
-                    "is_primary": image.is_primary,
-                    "storage_key": image.storage_key,
-                }
+        return _capture_target_rows_locked(organization_id)
+
+
+def _target_snapshot_from_rows(
+    product_rows: list[dict[str, Any]],
+    image_rows: list[dict[str, Any]],
+    storage_keys: list[tuple[str, str]],
+    prepared_by_storage_key: dict[str, Any],
+) -> _TargetSnapshot:
+    prepared_images = []
+    for image in image_rows:
+        prepared = prepared_by_storage_key.get(image["storage_key"])
+        if prepared is None:
+            raise CatalogPackageError(
+                ErrorCode.MEDIA_UNAVAILABLE,
+                "target ProductImage media could not be verified",
+                path=f"target.product_images[{image['portable_id']}]",
             )
-            storage_keys.append((str(image.portable_id), image.storage_key))
-        return product_rows, image_rows, storage_keys
+        image_copy = dict(image)
+        image_copy.pop("storage_key")
+        image_copy["asset_path"] = prepared.asset_path
+        image_copy["content_sha256"] = prepared.sha256
+        prepared_images.append(image_copy)
+    digest_value = {"products": product_rows, "product_images": prepared_images}
+    digest = hashlib.sha256(canonical_json_bytes(digest_value)).hexdigest()
+    return _TargetSnapshot(tuple(product_rows), tuple(prepared_images), tuple(storage_keys), digest)
+
+
+def _target_state_token(
+    product_rows: list[dict[str, Any]],
+    image_rows: list[dict[str, Any]],
+) -> str:
+    return hashlib.sha256(canonical_json_bytes({
+        "products": product_rows,
+        "product_images": image_rows,
+    })).hexdigest()
 
 
 def _target_snapshot(organization_id: int, storage_adapter=None) -> _TargetSnapshot:
@@ -190,7 +232,7 @@ def _target_snapshot(organization_id: int, storage_adapter=None) -> _TargetSnaps
     if storage_keys and storage_adapter is None:
         storage_adapter = get_media_storage()
 
-    prepared_images = []
+    prepared_by_storage_key = {}
     for index, image in enumerate(image_rows):
         try:
             stored, prepared = read_product_image(
@@ -209,23 +251,30 @@ def _target_snapshot(organization_id: int, storage_adapter=None) -> _TargetSnaps
                 "target ProductImage media could not be verified",
                 path=f"target.product_images[{index}]",
             ) from exc
-        image_copy = dict(image)
-        image_copy.pop("storage_key")
-        image_copy["asset_path"] = prepared.asset_path
-        image_copy["content_sha256"] = prepared.sha256
-        prepared_images.append(image_copy)
+        prepared_by_storage_key[image["storage_key"]] = prepared
+    return _target_snapshot_from_rows(product_rows, image_rows, storage_keys, prepared_by_storage_key)
 
-    digest_value = {
-        "products": product_rows,
-        "product_images": prepared_images,
-    }
-    digest = hashlib.sha256(canonical_json_bytes(digest_value)).hexdigest()
-    return _TargetSnapshot(
-        tuple(product_rows),
-        tuple(prepared_images),
-        tuple(storage_keys),
-        digest,
-    )
+
+def build_locked_target_snapshot(
+    organization_id: int,
+    *,
+    prepared_by_storage_key: dict[str, Any],
+) -> tuple[_TargetSnapshot, str]:
+    """Build a target snapshot without acquiring a lock or reading storage."""
+    rows = _capture_target_rows_locked(organization_id)
+    return _target_snapshot_from_rows(*rows, prepared_by_storage_key), _target_state_token(rows[0], rows[1])
+
+
+def validate_inventory_policy(inventory_policy: str) -> None:
+    if inventory_policy not in INVENTORY_POLICIES:
+        raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "invalid inventory policy")
+    if inventory_policy == "restore-snapshot":
+        if getattr(settings, "COMMERCE_ENV", "") != "development":
+            raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "snapshot stock restore is development-only")
+        if not getattr(settings, "CATALOG_ALLOW_SNAPSHOT_STOCK_RESTORE", False):
+            raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "snapshot stock restore is disabled")
+        if inventory_protections_active():
+            raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "active inventory protection forbids snapshot restore")
 
 
 def compute_target_digest(organization_id, *, storage_adapter=None) -> str:
@@ -490,15 +539,7 @@ def plan_catalog_import(
 
     if mode not in MODES:
         raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "mode must be merge or replace-storefront")
-    if inventory_policy not in INVENTORY_POLICIES:
-        raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "invalid inventory policy")
-    if inventory_policy == "restore-snapshot":
-        if getattr(settings, "COMMERCE_ENV", "") != "development":
-            raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "snapshot stock restore is development-only")
-        if not getattr(settings, "CATALOG_ALLOW_SNAPSHOT_STOCK_RESTORE", False):
-            raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "snapshot stock restore is disabled")
-        if inventory_protections_active():
-            raise CatalogPackageError(ErrorCode.OPERATION_NOT_ALLOWED, "active inventory protection forbids snapshot restore")
+    validate_inventory_policy(inventory_policy)
     require_compatible_catalog()
     organization = get_active_organization(organization_id)
     package_object, fingerprint = _package_parts(package, package_sha256)
