@@ -5,10 +5,11 @@ import uuid
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import override_settings
 
 from catalog.models import CatalogOperationReceipt, Product
 from catalog.portability.codec import canonical_json_bytes, encode_package
-from catalog.portability.schema import ErrorCode
+from media_storage.configuration import get_media_storage
 from organizations.models import Organization
 
 
@@ -122,10 +123,18 @@ def test_import_delegates_and_exact_retry_returns_same_receipt(tmp_path, capsys,
         "expected_catalog_digest": plan["target_digest"],
         "confirm_package_sha256": hashlib.sha256(package).hexdigest(),
     }
-    call_command("catalog_import", **arguments)
-    first = json.loads(capsys.readouterr().out)["receipt"]
-    call_command("catalog_import", **arguments)
-    second = json.loads(capsys.readouterr().out)["receipt"]
+    with override_settings(
+        MEDIA_STORAGE_BACKEND="local",
+        MEDIA_LOCAL_ROOT=str(tmp_path / "media"),
+        MEDIA_PUBLIC_BASE_URL="http://localhost:8000/media",
+        IS_PRODUCTION=False,
+    ):
+        get_media_storage.cache_clear()
+        call_command("catalog_import", **arguments)
+        first = json.loads(capsys.readouterr().out)["receipt"]
+        call_command("catalog_import", **arguments)
+        second = json.loads(capsys.readouterr().out)["receipt"]
+        get_media_storage.cache_clear()
     assert first["operation_id"] == second["operation_id"]
     assert Product.objects.filter(organization=organization).count() == 1
     assert CatalogOperationReceipt.objects.count() == 1
