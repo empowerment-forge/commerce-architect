@@ -543,6 +543,53 @@ def test_organization_scope_keeps_colliding_catalogs_independent(tmp_path):
 
 
 @pytest.mark.django_db(transaction=True)
+def test_same_image_portable_id_is_parent_qualified(tmp_path):
+    organization = Organization.objects.create(name="Qualified images")
+    first_id = "00000000-0000-4000-8000-000000000033"
+    second_id = "00000000-0000-4000-8000-000000000034"
+    shared_image_id = "00000000-0000-4000-8000-000000000035"
+    first = Product.objects.create(organization=organization, portable_id=first_id, sku="FIRST", name="First", description="description", product_type="physical", price="10.00", stock_quantity=0)
+    second = Product.objects.create(organization=organization, portable_id=second_id, sku="SECOND", name="Second", description="description", product_type="physical", price="10.00", stock_quantity=0)
+    first_content = png_bytes((1, 2, 3)); second_content = png_bytes((4, 5, 6))
+    adapter = LocalMediaStorageAdapter(tmp_path / "media")
+    first_stored = adapter.put_if_absent(first_content, "image/png")
+    second_stored = adapter.put_if_absent(second_content, "image/png")
+    ProductImage.objects.create(product=first, portable_id=shared_image_id, storage_key=first_stored.storage_key, is_primary=True)
+    ProductImage.objects.create(product=second, portable_id=shared_image_id, storage_key=second_stored.storage_key, is_primary=True)
+    first_path = f"media/{first_stored.sha256}.png"; second_path = f"media/{second_stored.sha256}.png"
+    images = [
+        {"portable_id": shared_image_id, "product_portable_id": first_id, "asset_path": first_path, "alt_text": "one", "sort_order": 0, "is_primary": True},
+        {"portable_id": shared_image_id, "product_portable_id": second_id, "asset_path": second_path, "alt_text": "two", "sort_order": 0, "is_primary": True},
+    ]
+    package = package_for([product(first_id, "FIRST"), product(second_id, "SECOND")], images, [(first_path, first_content, "image/png"), (second_path, second_content, "image/png")])
+    plan = plan_catalog_import(package, organization.pk, mode="merge", storage_adapter=adapter)
+    receipt = apply(package, organization, plan, adapter=adapter)
+    fresh = plan_catalog_import(package, organization.pk, mode="merge", storage_adapter=adapter)
+    assert receipt.post_catalog_digest == fresh.target_digest
+    assert set(ProductImage.objects.values_list("storage_key", flat=True)) == {first_stored.storage_key, second_stored.storage_key}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_exact_restore_retry_precedes_changed_live_eligibility(tmp_path):
+    organization = Organization.objects.create(name="Restore retry")
+    package = package_for([product("00000000-0000-4000-8000-000000000036", "RESTORE-RETRY", stock=7)])
+    adapter = LocalMediaStorageAdapter(tmp_path / "media")
+    with override_settings(COMMERCE_ENV="development", CATALOG_ALLOW_SNAPSHOT_STOCK_RESTORE=True):
+        plan = plan_catalog_import(package, organization.pk, mode="merge", inventory_policy="restore-snapshot", storage_adapter=adapter)
+        operation_id = uuid.uuid4()
+        first = apply(package, organization, plan, operation_id=operation_id, adapter=adapter, inventory_policy="restore-snapshot")
+    with override_settings(COMMERCE_ENV="production", CATALOG_ALLOW_SNAPSHOT_STOCK_RESTORE=False):
+        retry = apply(package, organization, plan, operation_id=operation_id, adapter=adapter, inventory_policy="restore-snapshot")
+        assert retry.pk == first.pk
+        with pytest.raises(CatalogPackageError) as new_exc:
+            apply(package, organization, plan, adapter=adapter, inventory_policy="restore-snapshot")
+        assert new_exc.value.code == ErrorCode.OPERATION_NOT_ALLOWED
+        with pytest.raises(CatalogPackageError) as conflict:
+            apply_catalog_import(package, organization.pk, mode="merge", inventory_policy="restore-snapshot", operation_id=operation_id, expected_package_sha256=plan.package_sha256, expected_catalog_digest="0" * 64, storage_adapter=adapter)
+        assert conflict.value.code == ErrorCode.OPERATION_ID_CONFLICT
+
+
+@pytest.mark.django_db(transaction=True)
 def test_primary_transition_failure_restores_original_aggregate(monkeypatch, tmp_path):
     organization = Organization.objects.create(name="Primary rollback")
     identity = "00000000-0000-4000-8000-000000000023"

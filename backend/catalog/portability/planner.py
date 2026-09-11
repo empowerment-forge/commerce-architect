@@ -107,7 +107,7 @@ class CatalogPlan:
 class _TargetSnapshot:
     products: tuple[dict[str, Any], ...]
     images: tuple[dict[str, Any], ...]
-    image_storage_keys: tuple[tuple[str, str], ...]
+    image_storage_keys: tuple[tuple[str, str, str], ...]
     digest: str
 
 
@@ -138,7 +138,7 @@ def _product_snapshot(product: Product) -> dict[str, Any]:
 
 def _capture_target_rows_locked(
     organization_id: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[tuple[str, str]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[tuple[str, str, str]]]:
     """Capture rows while the caller owns the Organization lock."""
     products = list(
         Product.objects.filter(organization_id=organization_id).order_by("portable_id")
@@ -176,13 +176,13 @@ def _capture_target_rows_locked(
                 "storage_key": image.storage_key,
             }
         )
-        storage_keys.append((str(image.portable_id), image.storage_key))
+        storage_keys.append((product_portable_id, str(image.portable_id), image.storage_key))
     return product_rows, image_rows, storage_keys
 
 
 def _capture_target_rows(
     organization_id: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[tuple[str, str]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[tuple[str, str, str]]]:
     with catalog_write_lock(organization_id) as organization:
         if organization.status != Organization.STATUS_ACTIVE:
             raise CatalogPackageError(

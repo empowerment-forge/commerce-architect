@@ -16,6 +16,7 @@ from catalog.portability.codec import decode_package
 from catalog.portability.errors import CatalogPackageError
 from catalog.portability.planner import (
     MODES,
+    INVENTORY_POLICIES,
     ZIP_FILE_LIMIT_BYTES,
     _capture_target_rows,
     _capture_target_rows_locked,
@@ -62,7 +63,8 @@ def _validate_inputs(
         _fail(ErrorCode.OPERATION_NOT_ALLOWED, "a positive Organization ID is required")
     if mode not in MODES:
         _fail(ErrorCode.OPERATION_NOT_ALLOWED, "mode must be merge or replace-storefront")
-    validate_inventory_policy(inventory_policy)
+    if inventory_policy not in INVENTORY_POLICIES:
+        _fail(ErrorCode.OPERATION_NOT_ALLOWED, "invalid inventory policy")
     if not isinstance(operation_id, uuid.UUID) or operation_id.version != 4:
         _fail(ErrorCode.OPERATION_NOT_ALLOWED, "operation_id must be a UUIDv4")
     for value, label in (
@@ -106,12 +108,16 @@ def _stage_media(package, storage_adapter):
 
 def _media_index(target, prepared, stored):
     result = {}
-    for image in target.images:
+    for product_id, image_id, storage_key in target.image_storage_keys:
+        image = next(
+            item for item in target.images
+            if item["product_portable_id"] == product_id and item["portable_id"] == image_id
+        )
         descriptor = SimpleNamespace(
             asset_path=image["asset_path"],
             sha256=image["content_sha256"],
         )
-        result[dict(target.image_storage_keys).get(image["portable_id"], "")] = descriptor
+        result[storage_key] = descriptor
     for path, media in stored.items():
         result[media.storage_key] = prepared[path]
     return result
@@ -298,6 +304,9 @@ def apply_catalog_import(
     existing = find_operation_receipt(operation_id, input_fingerprint=fingerprint)
     if existing is not None:
         return existing
+    # Live restore eligibility is checked only for new work. Exact retries
+    # must recover the durable receipt even if current policy changed.
+    validate_inventory_policy(inventory_policy)
     package = decode_package(package_bytes)
     verify_package_images(package)
     if storage_adapter is None:
