@@ -112,6 +112,7 @@ def command_error_for(exc: Exception) -> CatalogCommandError:
             ErrorCode.PACKAGE_CHANGED,
             ErrorCode.OPERATION_ID_CONFLICT,
             ErrorCode.CATALOG_BUSY,
+            ErrorCode.REFERENCED_CATALOG,
         }:
             return CatalogCommandError(str(exc), returncode=3)
         if code == ErrorCode.OPERATION_NOT_ALLOWED:

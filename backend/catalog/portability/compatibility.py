@@ -46,6 +46,36 @@ DECLARED_INVENTORY_PROTECTIONS = frozenset()
 
 
 @dataclass(frozen=True)
+class PurgeRelationSpec:
+    """A relation reviewed specifically for the development purge boundary."""
+
+    source_label: str
+    field_name: str
+    target_label: str
+    kind: str = "foreign_key"
+    through_label: str | None = None
+    through_field_name: str | None = None
+
+
+@dataclass(frozen=True)
+class PurgeGenericReferenceSpec:
+    model_label: str
+    content_type_field: str
+    object_id_field: str
+
+
+# This registry is intentionally separate from the normal portability allowlist.
+PURGE_INTERNAL_DELETE_EDGES = (
+    PurgeRelationSpec("catalog.ProductImage", "product", "catalog.Product"),
+)
+PURGE_EXTERNAL_RELATION_SPECS: tuple[PurgeRelationSpec, ...] = ()
+PURGE_GENERIC_REFERENCE_SPECS = (
+    PurgeGenericReferenceSpec("admin.LogEntry", "content_type", "object_id"),
+)
+PURGE_CUSTOM_INSPECTORS: dict[str, object] = {}
+
+
+@dataclass(frozen=True)
 class CompatibilityIssue:
     code: ErrorCode
     identity: str
