@@ -224,6 +224,49 @@ def _deactivate_destination_only(package, products, organization_id):
             product.save(update_fields={"is_active", "updated_at"})
 
 
+def _assert_final_state(package, products, organization_id, mode, inventory_policy, staged):
+    """Validate the committed aggregate before the receipt is written."""
+    incoming = {row["portable_id"]: row for row in package.catalog["products"]}
+    for identity, row in incoming.items():
+        product = Product.objects.get(organization_id=organization_id, portable_id=identity)
+        expected_stock = row["stock_quantity"] if inventory_policy == "restore-snapshot" else product.stock_quantity
+        if (
+            product.sku != row["sku"]
+            or product.name != row["name"]
+            or product.description != row["description"]
+            or format(product.price, ".2f") != row["price"]
+            or product.is_active != (row["status"] == "active")
+            or product.stock_quantity != expected_stock
+            or product.product_type != "physical"
+        ):
+            raise CatalogPackageError(ErrorCode.IMPORT_FAILED, "final Product aggregate differs from the plan")
+        actual_images = {
+            str(image.portable_id): image
+            for image in ProductImage.objects.filter(product=product)
+        }
+        expected_images = {
+            row["portable_id"]: row
+            for row in package.catalog["product_images"]
+            if row["product_portable_id"] == identity
+        }
+        if set(actual_images) != set(expected_images):
+            raise CatalogPackageError(ErrorCode.IMPORT_FAILED, "final ProductImage set differs from the plan")
+        for image_id, image_row in expected_images.items():
+            image = actual_images[image_id]
+            if (
+                image.storage_key != staged[image_row["asset_path"]].storage_key
+                or image.alt_text != image_row["alt_text"]
+                or image.sort_order != image_row["sort_order"]
+                or image.is_primary != image_row["is_primary"]
+            ):
+                raise CatalogPackageError(ErrorCode.IMPORT_FAILED, "final ProductImage aggregate differs from the plan")
+    if mode == "replace-storefront":
+        incoming_ids = set(incoming)
+        for product in Product.objects.filter(organization_id=organization_id):
+            if str(product.portable_id) not in incoming_ids and product.is_active:
+                raise CatalogPackageError(ErrorCode.IMPORT_FAILED, "replace-storefront left a destination Product active")
+
+
 def apply_catalog_import(
     package_bytes: bytes,
     organization_id: int,
@@ -290,6 +333,7 @@ def apply_catalog_import(
             _apply_images(package, products, staged)
             if mode == "replace-storefront":
                 _deactivate_destination_only(package, products, organization_id)
+            _assert_final_state(package, products, organization_id, mode, inventory_policy, staged)
             final_rows = _capture_target_rows_locked(organization_id)
             final_target = _target_snapshot_from_rows(*final_rows, index)
             receipt = create_operation_receipt(
