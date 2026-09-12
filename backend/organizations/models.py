@@ -1,5 +1,8 @@
+import uuid
+
 from django.core.validators import RegexValidator
 from django.db import models
+from django.core.exceptions import ValidationError
 
 
 class Organization(models.Model):
@@ -41,3 +44,88 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class OrganizationMembership(models.Model):
+    ROLE_OWNER = "owner"
+    ROLE_ADMINISTRATOR = "administrator"
+    ROLE_MANAGER = "manager"
+    ROLE_STAFF = "staff"
+    ROLE_CHOICES = (
+        (ROLE_OWNER, "Owner"),
+        (ROLE_ADMINISTRATOR, "Administrator"),
+        (ROLE_MANAGER, "Manager"),
+        (ROLE_STAFF, "Staff"),
+    )
+
+    STATUS_ACTIVE = "active"
+    STATUS_SUSPENDED = "suspended"
+    STATUS_REVOKED = "revoked"
+    STATUS_CHOICES = (
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_SUSPENDED, "Suspended"),
+        (STATUS_REVOKED, "Revoked"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="organization_memberships",
+    )
+    role = models.CharField(max_length=13, choices=ROLE_CHOICES)
+    status = models.CharField(max_length=9, choices=STATUS_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "user"),
+                name="organization_membership_org_user_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    role__in=[
+                        "owner",
+                        "administrator",
+                        "manager",
+                        "staff",
+                    ]
+                ),
+                name="organization_membership_role_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    status__in=["active", "suspended", "revoked"]
+                ),
+                name="organization_membership_status_valid",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.pk and not self._state.adding:
+            existing = type(self).objects.filter(pk=self.pk).values(
+                "organization_id", "user_id"
+            ).first()
+            if existing:
+                errors = {}
+                if existing["organization_id"] != self.organization_id:
+                    errors["organization"] = "Membership organization cannot be changed."
+                if existing["user_id"] != self.user_id:
+                    errors["user"] = "Membership user cannot be changed."
+                if errors:
+                    raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.organization_id}:{self.user_id}:{self.role}"
