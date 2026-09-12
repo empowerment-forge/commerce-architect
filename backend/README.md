@@ -24,6 +24,34 @@ docker compose exec -T web python manage.py migrate
 Use `podman-compose` in place of `docker compose` for the supported Podman
 workflow.
 
+## Catalog Portability v1 operator workflow
+
+Catalog Portability is a trusted-operator capability scoped to one active
+Organization. Enable it explicitly, then use the reviewed commands below from
+the backend container:
+
+```bash
+podman-compose exec -T web python manage.py catalog_export \
+  --organization <ORG_ID> --output /secure/path/catalog.zip
+podman-compose exec -T web python manage.py catalog_validate \
+  --organization <ORG_ID> --input /secure/path/catalog.zip --mode merge
+podman-compose exec -T web python manage.py catalog_operation_status \
+  --organization <ORG_ID> --operation-id <UUIDV4>
+```
+
+`catalog_import` requires the exact validated package/catalog digests and
+explicit confirmation for `replace-storefront`; the default inventory policy
+preserves live destination stock. `catalog_reset_storefront` is a
+non-destructive, receipt-backed deactivation. `catalog_dev_purge` is reserved
+for disposable development data, requires preview plus exact confirmation,
+fails closed on references, and is denied in production. Never copy secrets
+into commands, packages, logs, frontend code, or documentation. Use the
+durable operation receipt to recover a lost acknowledgement before retrying.
+
+The Product API exposes ordered ProductImage metadata and adapter-generated
+public URLs. It selects an explicit primary image first, then the first
+domain-sorted fallback; zero-image Products remain valid.
+
 Django migrations live within each app's `migrations/` directory. Migration
 files are reviewed schema changes; they do not seed application data or create
 privileged users.

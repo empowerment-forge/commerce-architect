@@ -135,5 +135,107 @@ retention protection for `sha256/`, HTTPS, canonical response metadata,
 `X-Content-Type-Options: nosniff`, successful-object caching without negative
 caching, and read-only public delivery.
 
-This boundary does not add import/export services, a native upload API or UI,
-image transformations, garbage collection, or storefront image presentation.
+Catalog Portability does not add a native upload API or UI, image
+transformations, or media garbage collection. T16 exposes the existing
+ProductImage metadata through the storefront Product API and renders the
+backend-selected image in the existing ProductCard; it does not introduce a
+gallery or editing workflow.
+
+## Catalog Portability v1 implemented behavior
+
+The v1 capability is an explicit-Organization, trusted-operator workflow:
+
+- `catalog_export` produces a deterministic package containing physical
+  Products, ordered ProductImage metadata, and verified immutable media bytes.
+- `catalog_validate` performs bounded archive/schema/media/planning validation
+  without mutating catalog rows or storage.
+- `catalog_import` applies `merge` or confirmed `replace-storefront` plans
+  atomically under the Organization lock. Merge preserves destination-only
+  Products; replace deactivates destination-only active Products.
+- `catalog_reset_storefront` is a non-destructive, receipt-backed reset that
+  deactivates active Products and preserves rows, images, media, and history.
+- `catalog_dev_purge` is development-only, requires an exact confirmation and
+  closed-world reference checks, deletes reviewed Product/Image graphs, and
+  never deletes immutable media or resets sequences.
+- `catalog_operation_status` reads a durable receipt for an operation ID.
+
+Receipts are immutable, operation IDs are globally unique, retries with the
+same input return the original receipt, and ambiguous commit outcomes fail
+closed with `OUTCOME_UNKNOWN` unless a durable receipt can be recovered.
+Organization locks, target digests, package digests, final-state checks, and
+bounded errors protect against stale targets, concurrent writers, partial
+mutation, and cross-Organization access.
+
+Stock is live state by default: imports preserve destination stock. The
+`restore-snapshot` policy is development-only and must be explicitly enabled;
+production rejects snapshot restoration and destructive purge. Product and
+ProductImage transport identity uses scoped UUIDv4 portable IDs, never local
+primary keys.
+
+Storefront responses expose ordered `images` metadata with adapter-generated
+public URLs, alt text, sort order, and primary status. Explicit primary images
+are first; otherwise the first domain-sorted image is presented. Empty image
+sets are valid. Raw storage keys, package internals, credentials, and
+cross-Organization or inactive Products are not exposed by the public API.
+Imported media remains byte-exact and content-addressed; no garbage
+collection occurs.
+
+### Trusted operator command examples
+
+Run these only from a trusted backend environment with
+`CATALOG_PORTABILITY_ENABLED=true` and an explicit active Organization ID:
+
+```bash
+podman-compose exec -T web python manage.py catalog_export \
+  --organization <ORG_ID> --output /secure/path/catalog.zip
+podman-compose exec -T web python manage.py catalog_validate \
+  --organization <ORG_ID> --input /secure/path/catalog.zip --mode merge
+podman-compose exec -T web python manage.py catalog_reset_storefront \
+  --organization <ORG_ID> --validate-only
+podman-compose exec -T web python manage.py catalog_operation_status \
+  --organization <ORG_ID> --operation-id <UUIDV4>
+```
+
+Import and reset apply commands require the plan's exact package/catalog
+digests, a fresh UUIDv4, and the appropriate Organization confirmation. Purge
+is restricted to disposable development data:
+
+```bash
+podman-compose exec -T web python manage.py catalog_import \
+  --organization <ORG_ID> --input /secure/path/catalog.zip \
+  --mode replace-storefront --operation-id <UUIDV4> \
+  --expected-catalog-digest <DIGEST> \
+  --confirm-package-sha256 <PACKAGE_SHA256> \
+  --confirm-organization <ORG_ID>
+podman-compose exec -T web python manage.py catalog_dev_purge \
+  --organization <ORG_ID> --validate-only
+```
+
+Never run destructive commands against production. Preserve the JSON output
+and receipt identifiers for recovery; on a lost acknowledgement, query
+`catalog_operation_status` before retrying. A missing receipt after an
+ambiguous commit is not permission to guess that a mutation failed.
+
+## Final conformance and known exclusions
+
+The repository's PostgreSQL tests cover deterministic package bytes, hostile
+archives and media, Organization isolation, locking/concurrency, stale
+targets, receipt idempotency and outcome recovery, reset/purge safety, and
+storefront image presentation through reset/import round trips. Disposable
+development UAT covers export, validate, reset, empty storefront, restore,
+image presentation, purge, fresh restore, and operation-status behavior.
+
+This repository does not contain Orders, OrderItems, checkout, carts, or
+payments. Consequently, no claim is made that real order history was tested.
+When those domains are introduced, their release must add integration tests
+proving that Order/OrderItem history and historical snapshots remain unchanged
+through merge, replace-storefront, reset, and purge; referenced catalog rows
+are protected; and inventory writers use the common Organization locking
+contract.
+
+Hosted production media readiness remains an environment evidence concern:
+the configured S3-compatible adapter, isolated credentials/bucket, explicit
+jurisdiction, immutable `sha256/` retention, HTTPS custom domain, and required
+cache/header policy must be verified in the deployment environment before
+claiming production delivery readiness. The application contract does not
+copy secrets into package data, logs, frontend code, or this document.
