@@ -448,6 +448,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_THROTTLE_RATES": {
         "password_recovery_request": "5/minute",
+        "operator_reauthentication": "5/minute",
     },
     # Trust one forwarding hop only when the deployment explicitly trusts the
     # platform proxy for the original HTTPS scheme; local clients use REMOTE_ADDR.
@@ -461,3 +462,5 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
 }
+
+OPERATOR_RECENT_AUTHENTICATION_SECONDS = 300
