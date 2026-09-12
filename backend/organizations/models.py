@@ -124,6 +124,14 @@ class OrganizationMembership(models.Model):
                     raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
+        transition_save = kwargs.pop("_transition_save", False)
+        if self.pk and not self._state.adding and not transition_save:
+            current = type(self).objects.only("role", "status").get(pk=self.pk)
+            if (current.role, current.status) != (self.role, self.status):
+                from .services import transition_membership
+
+                transition_membership(self, role=self.role, status=self.status)
+                return
         self.full_clean()
         return super().save(*args, **kwargs)
 
