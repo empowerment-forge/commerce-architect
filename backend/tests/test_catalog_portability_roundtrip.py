@@ -121,7 +121,10 @@ def test_fresh_organization_restore_has_canonical_content_and_new_local_pk(tmp_p
     package = build_export_package(source.pk, storage_adapter=adapter)
     destination = Organization.objects.create(name="Fresh destination")
 
-    with override_settings(CATALOG_ALLOW_SNAPSHOT_STOCK_RESTORE=True):
+    with override_settings(
+        COMMERCE_ENV="development",
+        CATALOG_ALLOW_SNAPSHOT_STOCK_RESTORE=True,
+    ):
         apply_package(
             package,
             destination,

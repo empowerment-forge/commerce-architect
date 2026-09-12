@@ -8,6 +8,7 @@ from catalog.models import CatalogOperationReceipt, Product
 from catalog.portability.planner import plan_catalog_import
 from catalog.portability.importer import apply_catalog_import
 from catalog.portability.reset import apply_storefront_reset, preview_storefront_reset
+from media_storage.local import LocalMediaStorageAdapter
 from organizations.models import Organization
 
 
@@ -27,9 +28,10 @@ def empty_package():
 
 
 @pytest.mark.django_db(transaction=True)
-def test_reset_and_import_append_receipts_without_rewriting_durable_history():
+def test_reset_and_import_append_receipts_without_rewriting_durable_history(tmp_path):
     organization = Organization.objects.create(name="History boundary")
     package = empty_package()
+    adapter = LocalMediaStorageAdapter(tmp_path / "media")
     plan = plan_catalog_import(package, organization.pk, mode="merge")
     import_receipt = apply_catalog_import(
         package,
@@ -38,13 +40,15 @@ def test_reset_and_import_append_receipts_without_rewriting_durable_history():
         operation_id=uuid.uuid4(),
         expected_package_sha256=plan.package_sha256,
         expected_catalog_digest=plan.target_digest,
+        storage_adapter=adapter,
     )
-    preview = preview_storefront_reset(organization.pk)
+    preview = preview_storefront_reset(organization.pk, storage_adapter=adapter)
     reset_receipt = apply_storefront_reset(
         organization.pk,
         operation_id=uuid.uuid4(),
         expected_catalog_digest=preview.target_digest,
         confirmed_organization_id=organization.pk,
+        storage_adapter=adapter,
     )
 
     receipts = list(
