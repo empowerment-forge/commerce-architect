@@ -11,6 +11,7 @@ const mockProduct: Product = {
   price: "19.99",
   is_active: true,
   created_at: "",
+  images: [],
 };
 
 describe("ProductCard", () => {
@@ -44,5 +45,29 @@ describe("ProductCard", () => {
 
     expect(screen.getByText("No description available.")).toBeInTheDocument();
     expect(screen.getByText("Test Product")).toBeInTheDocument();
+  });
+
+  it("renders the backend-selected image and alt text", () => {
+    render(
+      <ProductCard
+        product={{
+          ...mockProduct,
+          images: [
+            {
+              portable_id: "image-1",
+              url: "https://media.example/sha256/example.jpg",
+              alt_text: "A product portrait",
+              sort_order: 0,
+              is_primary: true,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "A product portrait" })).toHaveAttribute(
+      "src",
+      "https://media.example/sha256/example.jpg",
+    );
   });
 });

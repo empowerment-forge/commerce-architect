@@ -29,6 +29,7 @@ describe("ProductListPage", () => {
           price: "10.00",
           is_active: true,
           created_at: "",
+          images: [],
         },
       ],
     } as Response);

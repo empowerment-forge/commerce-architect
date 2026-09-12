@@ -19,7 +19,10 @@ def test_product_list_api_returns_active_product_without_auth(client):
         stock_quantity=0,
     )
 
-    with override_settings(STOREFRONT_ORGANIZATION_ID=organization.pk):
+    with override_settings(
+        STOREFRONT_ORGANIZATION_ID=organization.pk,
+        MEDIA_PUBLIC_BASE_URL="https://media.example",
+    ):
         response = client.get("/api/products/")
 
     assert response.status_code == 200
@@ -27,3 +30,4 @@ def test_product_list_api_returns_active_product_without_auth(client):
     assert isinstance(data, list)
     assert len(data) == 1
     assert data[0]["name"] == "API Product"
+    assert data[0]["images"] == []
