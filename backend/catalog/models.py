@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models, transaction
+from django.utils import timezone
 
 from organizations.models import Organization
 from catalog.portability.schema import MAX_STOCK_QUANTITY, SKU_PATTERN
@@ -183,3 +184,28 @@ class ProductImage(models.Model):
                 name="product_image_sort_order_nonnegative",
             ),
         ]
+
+
+class CatalogOperationReceipt(models.Model):
+    """Immutable record of a successfully committed catalog operation."""
+
+    operation_id = models.UUIDField(unique=True, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="catalog_operation_receipts",
+    )
+    operation_type = models.CharField(max_length=64)
+    package_sha256 = models.CharField(max_length=64, null=True, blank=True)
+    inventory_policy = models.CharField(max_length=32, null=True, blank=True)
+    expected_catalog_digest = models.CharField(max_length=64, null=True, blank=True)
+    pre_catalog_digest = models.CharField(max_length=64, null=True, blank=True)
+    post_catalog_digest = models.CharField(max_length=64, null=True, blank=True)
+    input_fingerprint = models.CharField(max_length=64)
+    result_counts = models.JSONField(default=dict)
+    completed_at = models.DateTimeField(default=timezone.now)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("Catalog operation receipts are immutable.")
+        super().save(*args, **kwargs)

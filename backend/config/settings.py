@@ -179,6 +179,10 @@ STOREFRONT_ORGANIZATION_ID = env_optional_positive_int(
     "STOREFRONT_ORGANIZATION_ID"
 )
 CATALOG_PORTABILITY_ENABLED = env_bool("CATALOG_PORTABILITY_ENABLED", False)
+CATALOG_ALLOW_DESTRUCTIVE_RESET = env_bool(
+    "CATALOG_ALLOW_DESTRUCTIVE_RESET",
+    False,
+)
 MEDIA_STORAGE_BACKEND = os.environ.get("MEDIA_STORAGE_BACKEND", "disabled").strip().lower()
 MEDIA_PUBLIC_BASE_URL = os.environ.get("MEDIA_PUBLIC_BASE_URL", "").strip().rstrip("/")
 MEDIA_LOCAL_ROOT = os.environ.get("MEDIA_LOCAL_ROOT", "").strip()
