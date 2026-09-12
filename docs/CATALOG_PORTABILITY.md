@@ -159,9 +159,11 @@ The v1 capability is an explicit-Organization, trusted-operator workflow:
   never deletes immutable media or resets sequences.
 - `catalog_operation_status` reads a durable receipt for an operation ID.
 
-Receipts are immutable, operation IDs are globally unique, retries with the
-same input return the original receipt, and ambiguous commit outcomes fail
-closed with `OUTCOME_UNKNOWN` unless a durable receipt can be recovered.
+Receipts are immutable through the supported application operations, operation
+IDs are globally unique, retries with the same input return the original
+receipt, and ambiguous commit outcomes fail closed with `OUTCOME_UNKNOWN`
+unless a durable receipt can be recovered. Direct database maintenance remains
+a trusted-operator capability and must not rewrite or delete receipts.
 Organization locks, target digests, package digests, final-state checks, and
 bounded errors protect against stale targets, concurrent writers, partial
 mutation, and cross-Organization access.
