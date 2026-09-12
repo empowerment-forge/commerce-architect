@@ -1,3 +1,5 @@
+import secrets
+
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -226,6 +228,7 @@ class SessionTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
         security, _ = AccountSecurityState.objects.get_or_create(user=user)
         token["session_generation"] = security.session_generation
+        token["session_id"] = secrets.token_urlsafe(32)
         return token
 
 
@@ -270,3 +273,9 @@ class PasswordChangeSerializer(serializers.Serializer):
                 {"new_password": list(exc.messages)}
             ) from exc
         return attrs
+
+
+class ReauthenticationSerializer(serializers.Serializer):
+    organization_id = serializers.IntegerField(min_value=1)
+    purpose = serializers.CharField(max_length=64, allow_blank=False)
+    password = serializers.CharField(write_only=True, trim_whitespace=False)

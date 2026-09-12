@@ -137,3 +137,50 @@ class OrganizationMembership(models.Model):
 
     def __str__(self):
         return f"{self.organization_id}:{self.user_id}:{self.role}"
+
+
+class OrganizationAuditEvent(models.Model):
+    """Immutable record of a successful Organization-scoped mutation."""
+
+    OUTCOME_SUCCEEDED = "succeeded"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="audit_events",
+    )
+    actor = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="organization_audit_events",
+    )
+    operation_id = models.UUIDField(unique=True, editable=False)
+    action = models.CharField(max_length=64)
+    target_type = models.CharField(max_length=64)
+    target_identifier = models.CharField(max_length=255)
+    outcome = models.CharField(max_length=9, default=OUTCOME_SUCCEEDED, editable=False)
+    before_state = models.JSONField(default=dict)
+    after_state = models.JSONField(default=dict)
+    reason = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(outcome="succeeded"),
+                name="organization_audit_event_succeeded",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Organization audit events are immutable.")
+        self.outcome = self.OUTCOME_SUCCEEDED
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Organization audit events are immutable.")
+
+    def __str__(self):
+        return f"{self.organization_id}:{self.action}:{self.operation_id}"

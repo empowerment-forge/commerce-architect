@@ -17,6 +17,7 @@ from .serializers import (
     PasswordChangeSerializer,
     PasswordRecoveryConfirmSerializer,
     PasswordRecoveryRequestSerializer,
+    ReauthenticationSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
     SessionTokenObtainPairSerializer,
@@ -38,6 +39,12 @@ from .services import (
     send_password_recovery_email,
     verification_metadata,
     verify_email,
+)
+from organizations.authorization import OperatorAuthorizationDenied, resolve_operator_authorization
+from organizations.permissions import ORGANIZATION_CAPABILITIES_MANAGE
+from organizations.reauthentication import (
+    RECENT_AUTHENTICATION_PURPOSE,
+    issue_recent_authentication,
 )
 
 
@@ -372,6 +379,57 @@ class PasswordChangeView(APIView):
             samesite=settings.REFRESH_COOKIE_SAMESITE,
         )
         return response
+
+
+class ReauthenticateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "operator_reauthentication"
+
+    def post(self, request):
+        serializer = ReauthenticationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        organization_id = serializer.validated_data["organization_id"]
+        purpose = serializer.validated_data["purpose"]
+        if purpose != RECENT_AUTHENTICATION_PURPOSE:
+            return Response(
+                {"code": "unsupported_purpose", "detail": "This purpose is not supported."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            resolve_operator_authorization(
+                request,
+                organization_id,
+                ORGANIZATION_CAPABILITIES_MANAGE,
+            )
+        except OperatorAuthorizationDenied:
+            return Response(
+                {"code": "operator_not_authorized", "detail": "Operator authorization failed."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not request.user.check_password(serializer.validated_data["password"]):
+            return Response(
+                {"code": "invalid_password", "detail": "Current password is incorrect."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            proof = issue_recent_authentication(
+                request=request,
+                organization_id=organization_id,
+                purpose=purpose,
+            )
+        except ValueError:
+            return Response(
+                {"code": "reauthentication_unavailable", "detail": "Sign in again before reauthenticating."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return Response(
+            {
+                "proof": proof,
+                "expires_in": settings.OPERATOR_RECENT_AUTHENTICATION_SECONDS,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ChangeEmailView(APIView):

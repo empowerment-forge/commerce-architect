@@ -16,10 +16,13 @@ def test_membership_migration_applies_cleanly_without_seeding_rows():
     executor = MigrationExecutor(connection)
     executor.migrate([("organizations", "0001_initial")])
     executor = MigrationExecutor(connection)
-    executor.migrate([("organizations", "0002_organizationmembership")])
+    executor.migrate([("organizations", "0003_organizationauditevent")])
     assert executor.loader.project_state(
-        [("organizations", "0002_organizationmembership")]
+        [("organizations", "0003_organizationauditevent")]
     ).apps.get_model("organizations", "OrganizationMembership").objects.count() == 0
+    assert executor.loader.project_state(
+        [("organizations", "0003_organizationauditevent")]
+    ).apps.get_model("organizations", "OrganizationAuditEvent").objects.count() == 0
 
 
 @pytest.mark.django_db(transaction=True)
@@ -35,7 +38,7 @@ def test_membership_migration_preserves_existing_organization_and_user_data():
     user = OldUser.objects.create_user(username="existing-user", email="existing@example.com")
 
     executor = MigrationExecutor(connection)
-    executor.migrate([("organizations", "0002_organizationmembership")])
+    executor.migrate([("organizations", "0003_organizationauditevent")])
     Organization = get_user_model()._meta.apps.get_model("organizations", "Organization")
     User = get_user_model()
     assert Organization.objects.get(pk=organization.pk).name == "Existing Organization"
