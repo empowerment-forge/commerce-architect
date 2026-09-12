@@ -169,8 +169,26 @@ def test_last_active_owner_guard_allows_equal_owners_but_blocks_final_transition
         role=OrganizationMembership.ROLE_OWNER,
         status=OrganizationMembership.STATUS_ACTIVE,
     ).count() == 1
-    with pytest.raises(LastActiveOwnerError):
+    with pytest.raises(LastActiveOwnerError) as error:
         transition_membership(second, role=OrganizationMembership.ROLE_MANAGER)
+    assert error.value.code == "last_active_owner"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_direct_role_status_save_uses_last_owner_guard(current_membership_schema):
+    organization = Organization.objects.create(name="Direct Save Organization")
+    owner = membership(
+        organization,
+        verified_user("direct-save-owner"),
+        OrganizationMembership.ROLE_OWNER,
+    )
+
+    owner.role = OrganizationMembership.ROLE_STAFF
+    with pytest.raises(LastActiveOwnerError, match="retain an active Owner"):
+        owner.save()
+
+    owner.refresh_from_db()
+    assert owner.role == OrganizationMembership.ROLE_OWNER
 
 
 @pytest.mark.django_db(transaction=True)

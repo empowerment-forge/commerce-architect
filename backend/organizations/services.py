@@ -55,7 +55,8 @@ def validate_membership_transition(membership, *, role=None, status=None):
     )
     if not has_other_healthy_owner and not proposed_is_healthy_owner:
         raise LastActiveOwnerError(
-            "An Organization must retain an active Owner linked to an active User."
+            "An Organization must retain an active Owner linked to an active User.",
+            code=LastActiveOwnerError.code,
         )
     return locked_membership, proposed_role, proposed_status
 
@@ -68,5 +69,7 @@ def transition_membership(membership, *, role=None, status=None):
     )
     locked_membership.role = proposed_role
     locked_membership.status = proposed_status
-    locked_membership.save(update_fields=["role", "status", "updated_at"])
+    locked_membership.save(
+        update_fields=["role", "status", "updated_at"], _transition_save=True
+    )
     return locked_membership
