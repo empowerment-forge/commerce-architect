@@ -1,12 +1,12 @@
 # Application runtime
-Django>=6.1,<6.2
+Django>=6.1.1,<6.2
 djangorestframework
 djangorestframework-simplejwt
 gunicorn
 psycopg2-binary
 whitenoise>=6.12,<7
 Pillow>=12.3,<13
-boto3>=1.40,<2
+boto3>=1.43.93,<2
 
 # Test tooling (the production image is also the CI/test image)
 pytest
